@@ -1,0 +1,52 @@
+import React from 'react';
+import { Plus, MessageSquare, Flame } from 'lucide-react';
+
+export default function Sidebar({ 
+  sessions, 
+  currentSession, 
+  onSelectSession, 
+  onNewSession 
+}) {
+  return (
+    <div className="sidebar">
+      <div className="sidebar-header">
+        <div className="sidebar-logo">
+          <div className="sidebar-logo-icon">⚒</div>
+          <div>
+            <div className="sidebar-logo-text">BSC Forge</div>
+            <div className="sidebar-logo-version">v0.1.0 Beta</div>
+          </div>
+        </div>
+        <button className="new-chat-btn" onClick={onNewSession}>
+          <Plus size={16} /> Yeni Sohbet
+        </button>
+      </div>
+
+      <div className="sidebar-sessions">
+        <div className="sidebar-section-title">Son Sohbetler</div>
+        {sessions.map(session => (
+          <div 
+            key={session.id}
+            className={`session-item ${currentSession?.id === session.id ? 'active' : ''}`}
+            onClick={() => onSelectSession(session)}
+          >
+            <MessageSquare size={16} className="session-item-icon" />
+            <div className="session-item-text">{session.title}</div>
+          </div>
+        ))}
+        {sessions.length === 0 && (
+          <div style={{ padding: '12px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            Henüz geçmiş sohbet yok.
+          </div>
+        )}
+      </div>
+
+      <div className="sidebar-footer">
+        <div className="session-item" style={{ marginBottom: 0 }}>
+          <Flame size={16} className="session-item-icon" color="var(--accent-amber)" />
+          <div className="session-item-text" style={{ color: 'var(--text-secondary)' }}>Ajan Ayarları</div>
+        </div>
+      </div>
+    </div>
+  );
+}
