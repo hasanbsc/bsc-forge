@@ -7,9 +7,18 @@ __pycache__/
 *.sqlite3
 *.db
 venv/
+.venv/
 .env.local
 .env.development
 .env.production
+
+# Python testing & type checking
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage/
+*.egg-info/
+build/
 
 # Node/Vite
 node_modules/
