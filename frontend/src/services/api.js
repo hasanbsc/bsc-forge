@@ -23,6 +23,14 @@ export const fetchSessionMessages = async (sessionId) => {
   return await res.json();
 };
 
+export const deleteSession = async (sessionId) => {
+  const res = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Sohbet silinemedi');
+  return await res.json();
+};
+
 export const fetchModels = async () => {
   const res = await fetch(`${API_BASE_URL}/models`);
   if (!res.ok) throw new Error('Modeller getirilemedi');

@@ -209,6 +209,7 @@ body {
   margin-bottom: 2px;
   color: var(--text-secondary);
   font-size: 0.88rem;
+  position: relative;
 }
 
 .session-item:hover {
@@ -228,9 +229,38 @@ body {
 }
 
 .session-item-text {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.session-delete-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.session-item:hover .session-delete-btn,
+.session-item.active .session-delete-btn {
+  opacity: 1;
+}
+
+.session-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
 }
 
 /* Sidebar alt bölüm */
@@ -250,6 +280,28 @@ body {
 }
 
 /* ─── Chat Header ──────────────────────────────────── */
+.session-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(239, 68, 68, 0.15);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  font-size: 0.875rem;
+}
+
+.session-error-banner button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
 .chat-header {
   height: var(--header-height);
   min-height: var(--header-height);
@@ -369,6 +421,7 @@ body {
 
 .model-dropdown-tag.cloud { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
 .model-dropdown-tag.local { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); }
+.model-dropdown-tag.router { background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); }
 
 /* ─── Chat Messages Area ──────────────────────────── */
 .chat-messages {
@@ -496,6 +549,44 @@ body {
   box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
 }
 
+.message-avatar.tool {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.message-tool {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 8px 12px;
+  background: rgba(59, 130, 246, 0.08);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid rgba(59, 130, 246, 0.4);
+}
+
+.message-tool-row .message-tool {
+  border-left-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.1);
+  color: #fcd34d;
+  font-style: normal;
+}
+
+.message-tool-row {
+  opacity: 0.95;
+}
+
+.message-streaming {
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
 .message-body {
   flex: 1;
   min-width: 0;
@@ -605,11 +696,53 @@ body {
   50% { opacity: 0; }
 }
 
+/* ─── Aktif model göstergesi ───────────────────────── */
+.active-model-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 10px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: var(--accent-amber);
+  font-size: 0.78rem;
+  font-weight: 500;
+  max-width: fit-content;
+}
+
+.active-model-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-amber);
+  flex-shrink: 0;
+  animation: model-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes model-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+
+.active-model-label {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.active-model-hint {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 0.72rem;
+}
+
 /* ─── Chat Input ───────────────────────────────────── */
 .chat-input-area {
   padding: 16px 24px 24px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
 }
 
 .chat-input-container {

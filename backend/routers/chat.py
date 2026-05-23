@@ -6,8 +6,10 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from services.llm_manager import llm_manager
 from services.chat_history import chat_history
+from services.forge_agent import forge_agent
+from services.model_router import model_router
+from services.provider_utils import model_active_event
 
 router = APIRouter()
 
@@ -32,6 +34,7 @@ class SessionCreate(BaseModel):
 @router.post("/sessions")
 async def create_session(body: SessionCreate):
     """Yeni sohbet oturumu oluştur."""
+    await chat_history.init_db()
     session_id = await chat_history.create_session(title=body.title, product=body.product)
     return {"session_id": session_id, "title": body.title}
 
@@ -39,6 +42,7 @@ async def create_session(body: SessionCreate):
 @router.get("/sessions")
 async def list_sessions(product: str | None = None):
     """Sohbet oturumlarını listele."""
+    await chat_history.init_db()
     sessions = await chat_history.get_sessions(product=product)
     return {"sessions": sessions}
 
@@ -53,6 +57,7 @@ async def get_session_messages(session_id: str):
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
     """Bir oturumu sil."""
+    await chat_history.init_db()
     await chat_history.delete_session(session_id)
     return {"status": "silindi"}
 
@@ -88,57 +93,61 @@ async def chat_websocket(websocket: WebSocket):
 
             message = data.get("message", "")
             session_id = data.get("session_id")
-            provider = data.get("provider", "gemini")
+            provider = data.get("provider", "auto")
             model = data.get("model")
+            routing = data.get("routing", "auto" if provider == "auto" else "manual")
             history = data.get("history", [])
 
             if not message.strip():
                 await websocket.send_json({"type": "error", "content": "Boş mesaj gönderilemez."})
                 continue
 
-            # Sohbet geçmişini oluştur
-            messages = []
+            # Akıllı model seçimi
+            decision = await model_router.route(
+                message=message,
+                provider=provider,
+                model=model,
+                routing=routing,
+                history=history,
+            )
+            provider = decision.provider
+            model = decision.model
 
-            # Sistem mesajı
-            messages.append({
-                "role": "user",
-                "content": (
-                    "Sen BSC Forge yapay zeka asistanısın. Türkçe yanıt ver. "
-                    "Yardımsever, bilgili ve dostça ol. Kod yazarken açıklama ekle. "
-                    "Markdown formatı kullanabilirsin."
-                ),
-            })
-            messages.append({
-                "role": "assistant",
-                "content": "Anlaşıldı! Ben BSC Forge asistanıyım. Sana nasıl yardımcı olabilirim?",
-            })
+            await websocket.send_json(model_active_event(
+                provider=decision.provider,
+                model=decision.model,
+                label=decision.label,
+            ))
 
-            # Önceki mesajları ekle
-            for msg in history:
-                messages.append({"role": msg["role"], "content": msg["content"]})
-
-            # Yeni mesajı ekle
-            messages.append({"role": "user", "content": message})
+            if routing == "auto" or data.get("provider") == "auto":
+                await websocket.send_json({
+                    "type": "routing",
+                    "content": f"🎯 {decision.reason}",
+                    "decision": decision.to_dict(),
+                })
 
             # Oturuma kaydet (varsa)
             if session_id:
                 await chat_history.add_message(session_id, "user", message)
 
-            # Streaming yanıt üret
+            # Forge Ajan: araçlar + streaming yanıt
             full_response = ""
             try:
-                async for token in llm_manager.stream(messages, provider=provider, model=model):
-                    full_response += token
-                    await websocket.send_json({"type": "token", "content": token})
+                async for event in forge_agent.run(
+                    user_message=message,
+                    history=history,
+                    provider=provider,
+                    model=model,
+                ):
+                    if event["type"] == "token":
+                        full_response += event["content"]
+                    await websocket.send_json(event)
 
-                # Tamamlandı
                 await websocket.send_json({"type": "done", "content": ""})
 
-                # Asistan yanıtını kaydet (varsa)
-                if session_id and full_response:
+                if session_id and full_response.strip():
                     await chat_history.add_message(session_id, "assistant", full_response)
 
-                    # İlk mesajsa, başlığı otomatik oluştur
                     if len(history) == 0:
                         title = message[:50] + ("..." if len(message) > 50 else "")
                         await chat_history.update_session_title(session_id, title)

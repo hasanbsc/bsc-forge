@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import ModelSelector from './components/ModelSelector';
-import { fetchSessions, createSession, fetchSessionMessages, fetchModels } from './services/api';
+import { fetchSessions, createSession, fetchSessionMessages, fetchModels, deleteSession } from './services/api';
 
 export default function App() {
   const [sessions, setSessions] = useState([]);
   const [currentSession, setCurrentSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [models, setModels] = useState([]);
-  const [provider, setProvider] = useState('gemini');
-  const [model, setModel] = useState('gemini-2.5-flash');
+  const [provider, setProvider] = useState('auto');
+  const [model, setModel] = useState('auto');
+  const [sessionError, setSessionError] = useState(null);
 
   // Başlangıçta modelleri ve sohbet geçmişini yükle
   useEffect(() => {
@@ -23,11 +24,16 @@ export default function App() {
         
         if (modelsData.models.length > 0) {
           setModels(modelsData.models);
-          // Varsayılan sağlayıcıyı bul
-          const activeProviders = modelsData.models.filter(m => m.status === 'aktif');
-          if (activeProviders.length > 0) {
-            setProvider(activeProviders[0].provider);
-            setModel(activeProviders[0].model);
+          const auto = modelsData.models.find(m => m.provider === 'auto');
+          if (auto || modelsData.default === 'auto') {
+            setProvider('auto');
+            setModel('auto');
+          } else {
+            const active = modelsData.models.filter(m => m.status === 'aktif' && m.provider !== 'auto');
+            if (active.length > 0) {
+              setProvider(active[0].provider);
+              setModel(active[0].model);
+            }
           }
         }
         
@@ -40,14 +46,18 @@ export default function App() {
   }, []);
 
   const handleNewSession = async () => {
+    setSessionError(null);
+    setMessages([]);
+    setCurrentSession(null);
+
     try {
       const data = await createSession();
       const newSession = { id: data.session_id, title: data.title, product: 'forge' };
       setSessions([newSession, ...sessions]);
       setCurrentSession(newSession);
-      setMessages([]);
     } catch (err) {
       console.error("Oturum oluşturulamadı:", err);
+      setSessionError('Yeni sohbet oluşturulamadı. Backend çalışıyor mu? (python3 main.py)');
     }
   };
 
@@ -62,6 +72,25 @@ export default function App() {
     }
   };
 
+  const handleDeleteSession = async (session) => {
+    const confirmed = window.confirm(`"${session.title}" sohbetini silmek istediğine emin misin?`);
+    if (!confirmed) return;
+
+    try {
+      await deleteSession(session.id);
+      const remaining = sessions.filter(s => s.id !== session.id);
+      setSessions(remaining);
+
+      if (currentSession?.id === session.id) {
+        setCurrentSession(null);
+        setMessages([]);
+      }
+    } catch (err) {
+      console.error("Sohbet silinemedi:", err);
+      setSessionError('Sohbet silinemedi. Backend çalışıyor mu?');
+    }
+  };
+
   return (
     <div className="app-layout">
       <Sidebar 
@@ -69,9 +98,18 @@ export default function App() {
         currentSession={currentSession}
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
+        onDeleteSession={handleDeleteSession}
       />
       
       <main className="main-content">
+        {sessionError && (
+          <div className="session-error-banner" role="alert">
+            {sessionError}
+            <button type="button" onClick={() => setSessionError(null)} aria-label="Kapat">
+              ×
+            </button>
+          </div>
+        )}
         <header className="chat-header">
           <div className="chat-header-title">
             {currentSession ? currentSession.title : 'Yeni Sohbet'}
@@ -97,6 +135,7 @@ export default function App() {
           setMessages={setMessages}
           provider={provider}
           model={model}
+          models={models}
         />
       </main>
     </div>

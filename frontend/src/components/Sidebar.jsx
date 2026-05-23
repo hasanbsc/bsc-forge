@@ -1,11 +1,12 @@
 import React from 'react';
-import { Plus, MessageSquare, Flame } from 'lucide-react';
+import { Plus, MessageSquare, Flame, Trash2 } from 'lucide-react';
 
 export default function Sidebar({ 
   sessions, 
   currentSession, 
   onSelectSession, 
-  onNewSession 
+  onNewSession,
+  onDeleteSession,
 }) {
   return (
     <div className="sidebar">
@@ -32,6 +33,18 @@ export default function Sidebar({
           >
             <MessageSquare size={16} className="session-item-icon" />
             <div className="session-item-text">{session.title}</div>
+            <button
+              type="button"
+              className="session-delete-btn"
+              title="Sohbeti sil"
+              aria-label={`${session.title} sohbetini sil`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteSession(session);
+              }}
+            >
+              <Trash2 size={14} />
+            </button>
           </div>
         ))}
         {sessions.length === 0 && (

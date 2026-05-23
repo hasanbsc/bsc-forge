@@ -1,10 +1,14 @@
 export class ChatWebSocket {
-  constructor(onToken, onDone, onError) {
+  constructor(onToken, onDone, onError, onTool, onOpen, onModelActive) {
     this.ws = null;
     this.onToken = onToken;
     this.onDone = onDone;
     this.onError = onError;
+    this.onTool = onTool;
+    this.onOpen = onOpen;
+    this.onModelActive = onModelActive;
     this.isConnected = false;
+    this._intentionalClose = false;
   }
 
   connect() {
@@ -16,6 +20,7 @@ export class ChatWebSocket {
 
     this.ws.onopen = () => {
       this.isConnected = true;
+      this.onOpen?.();
       console.log('WebSocket bağlandı');
     };
 
@@ -25,6 +30,10 @@ export class ChatWebSocket {
         this.onToken(data.content);
       } else if (data.type === 'done') {
         this.onDone();
+      } else if (data.type === 'model_active') {
+        this.onModelActive?.(data);
+      } else if (data.type === 'tool' || data.type === 'fallback' || data.type === 'routing') {
+        this.onTool?.(data.content);
       } else if (data.type === 'error') {
         this.onError(data.content);
       }
@@ -37,11 +46,13 @@ export class ChatWebSocket {
 
     this.ws.onerror = (error) => {
       console.error('WebSocket hatası:', error);
-      this.onError('Bağlantı hatası oluştu.');
+      if (!this._intentionalClose && !this.isConnected) {
+        this.onError('Bağlantı hatası oluştu.');
+      }
     };
   }
 
-  sendMessage(message, sessionId, provider, model, history) {
+  sendMessage(message, sessionId, provider, model, history, routing = 'manual') {
     if (!this.isConnected) {
       this.onError('Sunucuya bağlı değilsiniz.');
       return;
@@ -52,6 +63,7 @@ export class ChatWebSocket {
       session_id: sessionId,
       provider,
       model,
+      routing: provider === 'auto' || model === 'auto' ? 'auto' : routing,
       history
     };
 
@@ -60,8 +72,10 @@ export class ChatWebSocket {
 
   disconnect() {
     if (this.ws) {
+      this._intentionalClose = true;
       this.ws.close();
       this.ws = null;
     }
+    this.isConnected = false;
   }
 }

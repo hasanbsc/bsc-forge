@@ -1,15 +1,28 @@
 """BSC Forge — Ana FastAPI Uygulaması"""
+from contextlib import asynccontextmanager
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from routers.chat import router as chat_router
+from routers.models import router as models_router
+from services.chat_history import chat_history
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Uygulama başlarken SQLite tablolarını oluştur."""
+    await chat_history.init_db()
+    yield
+
 
 app = FastAPI(
     title="BSC Forge",
     description="Yapay Zeka Ürün Fabrikası — Backend API",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # CORS — Frontend'in backend'e erişebilmesi için
@@ -23,6 +36,7 @@ app.add_middleware(
 
 # Router'ları bağla
 app.include_router(chat_router, prefix="/api/chat", tags=["Sohbet"])
+app.include_router(models_router, prefix="/api", tags=["Modeller"])
 
 
 @app.get("/")
@@ -35,52 +49,9 @@ async def root():
         "providers": {
             "gemini": settings.is_gemini_configured(),
             "groq": settings.is_groq_configured(),
+            "deepseek": settings.is_deepseek_configured(),
         },
     }
-
-
-@app.get("/api/models")
-async def list_models():
-    """Kullanılabilir model sağlayıcılarını listele."""
-    models = []
-
-    if settings.is_gemini_configured():
-        models.append({
-            "provider": "gemini",
-            "model": "gemini-2.5-flash",
-            "label": "Gemini 2.5 Flash",
-            "type": "cloud",
-            "status": "aktif",
-        })
-
-    if settings.is_groq_configured():
-        models.extend([
-            {
-                "provider": "groq",
-                "model": "llama-3.3-70b-versatile",
-                "label": "Llama 3.3 70B (Groq)",
-                "type": "cloud",
-                "status": "aktif",
-            },
-            {
-                "provider": "groq",
-                "model": "llama-3.1-8b-instant",
-                "label": "Llama 3.1 8B (Groq)",
-                "type": "cloud",
-                "status": "aktif",
-            },
-        ])
-
-    # Ollama (yerel) — her zaman listede, bağlantı durumunu kontrol eder
-    models.append({
-        "provider": "ollama",
-        "model": "qwen2.5-coder:1.5b",
-        "label": "Qwen 2.5 Coder 1.5B (Yerel)",
-        "type": "local",
-        "status": "yapılandırılmadı",
-    })
-
-    return {"models": models, "default": settings.DEFAULT_MODEL}
 
 
 if __name__ == "__main__":

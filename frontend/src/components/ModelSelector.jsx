@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Cloud, Cpu, Server } from 'lucide-react';
+import { ChevronDown, Cloud, Cpu, Sparkles } from 'lucide-react';
 
 export default function ModelSelector({ 
   models, 
@@ -28,6 +28,7 @@ export default function ModelSelector({
   if (!currentModel) return null;
 
   const isLocal = currentModel.type === 'local';
+  const isAuto = currentModel.provider === 'auto' || currentModel.type === 'router';
 
   return (
     <div className="model-selector" ref={dropdownRef}>
@@ -35,7 +36,7 @@ export default function ModelSelector({
         className="model-selector-btn" 
         onClick={() => setIsOpen(!isOpen)}
       >
-        {isLocal ? <Cpu size={14} /> : <Cloud size={14} />}
+        {isAuto ? <Sparkles size={14} /> : isLocal ? <Cpu size={14} /> : <Cloud size={14} />}
         <span>{currentModel.label}</span>
         <ChevronDown size={14} />
       </button>
@@ -51,21 +52,13 @@ export default function ModelSelector({
                 setIsOpen(false);
               }}
             >
-              {m.type === 'local' ? <Cpu size={16} /> : <Cloud size={16} />}
+              {m.provider === 'auto' ? <Sparkles size={16} /> : m.type === 'local' ? <Cpu size={16} /> : <Cloud size={16} />}
               <div className="model-dropdown-label">{m.label}</div>
-              <div className={`model-dropdown-tag ${m.type}`}>
-                {m.type === 'local' ? 'Lokal' : 'Bulut'}
+              <div className={`model-dropdown-tag ${m.type === 'router' ? 'router' : m.type}`}>
+                {m.provider === 'auto' ? 'Akıllı' : m.type === 'local' ? 'Lokal' : 'Bulut'}
               </div>
             </div>
           ))}
-          
-          {models.find(m => m.provider === 'ollama') === undefined && (
-            <div className="model-dropdown-item" style={{ opacity: 0.5 }}>
-              <Server size={16} />
-              <div className="model-dropdown-label">Ollama (Kapalı)</div>
-              <div className="model-dropdown-tag local">Lokal</div>
-            </div>
-          )}
         </div>
       )}
     </div>
