@@ -9,7 +9,7 @@ import httpx
 from google import genai
 from groq import AsyncGroq
 
-from config import settings, reload_env
+from config import settings
 from services.provider_utils import (
     cascade_from,
     fallback_notice,
@@ -183,30 +183,43 @@ class LLMManager:
             "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
             "Content-Type": "application/json",
         }
-        prompt = "\n".join(
-            f"{m['role']}: {m['content']}" for m in messages if m['role'] in ("system", "user", "assistant")
-        )
-        payload = {"model": model, "prompt": prompt, "max_tokens": 4096, "temperature": 0.7}
+        ds_messages = [
+            {"role": m["role"], "content": m["content"]}
+            for m in messages
+            if m["role"] in ("system", "user", "assistant")
+        ]
+        payload = {
+            "model": model,
+            "messages": ds_messages,
+            "max_tokens": 4096,
+            "temperature": 0.7,
+            "stream": True,
+        }
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
-                r = await client.post(url, json=payload, headers=headers)
-                if r.status_code != 200:
-                    yield f"[HATA] Deepseek HTTP {r.status_code}: {r.text[:400]}"
-                    return
-                data = r.json()
-                # Common fields: 'text', 'output', or choices[0].text
-                text = None
-                if isinstance(data, dict):
-                    text = data.get("text") or data.get("output")
-                    if not text and data.get("choices"):
-                        ch = data.get("choices")
-                        if isinstance(ch, list) and ch:
-                            text = ch[0].get("text") or ch[0].get("message", {}).get("content")
-                if text:
-                    yield text
-                    return
-                yield "[HATA] Deepseek: beklenmeyen cevap formatı."
+                async with client.stream("POST", url, json=payload, headers=headers) as response:
+                    if response.status_code != 200:
+                        body = await response.aread()
+                        yield f"[HATA] Deepseek HTTP {response.status_code}: {body[:400]}"
+                        return
+                    async for line in response.aiter_lines():
+                        if not line or line == "data: [DONE]":
+                            continue
+                        if line.startswith("data: "):
+                            try:
+                                data = json.loads(line[6:])
+                                content = (
+                                    data.get("choices", [{}])[0]
+                                    .get("delta", {})
+                                    .get("content", "")
+                                )
+                                if content:
+                                    yield content
+                            except json.JSONDecodeError:
+                                continue
+        except httpx.ConnectError:
+            yield "[HATA] Deepseek API'ye bağlanılamadı."
         except Exception as e:
             yield f"[HATA] {friendly_provider_error(e, 'Deepseek')}"
 
@@ -232,9 +245,6 @@ class LLMManager:
         self, messages: list[dict], provider: str = "gemini", model: str | None = None
     ) -> AsyncGenerator[str, None]:
         """Seçilen sağlayıcıdan stream; kota/limit → Groq → Ollama."""
-        reload_env()
-        self._reset_clients()
-
         chain = cascade_from(provider)
         last_error = ""
 
@@ -266,9 +276,6 @@ class LLMManager:
         self, messages: list[dict], provider: str = "gemini", model: str | None = None
     ) -> AsyncGenerator[dict, None]:
         """Token + fallback_notice olayları (WebSocket için)."""
-        reload_env()
-        self._reset_clients()
-
         chain = cascade_from(provider)
         last_error = ""
 

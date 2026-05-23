@@ -7,6 +7,7 @@ from config import settings
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".cursor"}
 
 MAX_READ_BYTES = 80_000
+MAX_WRITE_BYTES = 200_000  # 200 KB
 
 
 def _workspace() -> Path:
@@ -14,12 +15,13 @@ def _workspace() -> Path:
 
 
 def resolve_path(relative: str) -> Path:
-    """Proje kökü altında güvenli yol çöz."""
+    """Proje kökü altında güvenli yol çöz; symlink bypass'ını engelle."""
     rel = (relative or ".").strip().replace("\\", "/").lstrip("/")
     if ".." in rel.split("/"):
         raise ValueError("Üst dizine çıkılamaz.")
-    target = (_workspace() / rel).resolve()
-    if not str(target).startswith(str(_workspace())):
+    workspace = _workspace()
+    target = (workspace / rel).resolve()
+    if not target.is_relative_to(workspace):
         raise ValueError("İzin verilmeyen yol.")
     return target
 
@@ -72,6 +74,29 @@ def read_file(path: str) -> str:
     return f"📄 {rel} ({len(text)} karakter)\n\n```\n{text}\n```"
 
 
+def write_file(path: str, content: str) -> str:
+    """Metin dosyası yaz (sandbox'lı, onay sonrası çalışır)."""
+    if not path or not path.strip():
+        return "[HATA] Dosya yolu gerekli."
+    try:
+        target = resolve_path(path)
+    except ValueError as e:
+        return f"[HATA] {e}"
+    if target.is_dir():
+        return f"[HATA] Bu bir klasör: {path}"
+    if len(content.encode("utf-8")) > MAX_WRITE_BYTES:
+        return f"[HATA] İçerik çok büyük (max {MAX_WRITE_BYTES // 1000} KB)."
+
+    action = "güncellendi" if target.exists() else "oluşturuldu"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target.write_text(content, encoding="utf-8")
+        rel = target.relative_to(_workspace())
+        return f"✅ `{rel}` {action} ({len(content)} karakter)"
+    except Exception as e:
+        return f"[HATA] Yazılamadı: {e}"
+
+
 TOOL_SCHEMAS = [
     {
         "name": "list_directory",
@@ -100,14 +125,38 @@ TOOL_SCHEMAS = [
             "required": ["path"],
         },
     },
+    {
+        "name": "write_file",
+        "description": (
+            "Proje kökünde bir metin dosyası oluşturur veya günceller. "
+            "Kullanıcı onayı gerektirir — onaylanmadan dosya yazılmaz. "
+            "Göreli yol kullan (örn. demo/index.html)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Göreli dosya yolu (örn. mysite/index.html).",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Dosyaya yazılacak tam içerik.",
+                },
+            },
+            "required": ["path", "content"],
+        },
+    },
 ]
 
 
 def execute_tool(name: str, args: dict) -> str:
-    """Araç adına göre çalıştır."""
+    """Araç adına göre çalıştır (write_file hariç — o onay sonrası chat.py'de çalışır)."""
     args = args or {}
     if name == "list_directory":
         return list_directory(args.get("path", "."))
     if name == "read_file":
         return read_file(args.get("path", ""))
+    if name == "write_file":
+        return write_file(args.get("path", ""), args.get("content", ""))
     return f"[HATA] Bilinmeyen araç: {name}"

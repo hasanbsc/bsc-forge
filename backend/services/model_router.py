@@ -23,21 +23,37 @@ from services.provider_utils import is_ollama_available
 # ─── Sınıflandırma sinyalleri ─────────────────────────────
 
 _FILE_SIGNALS = (
-    "klasör", "dosya", "listele", "listeler", "dizin", "içindeki",
-    "backend", "frontend", "proje", "kök", "read_file", "göster",
+    # Türkçe — mutlaka listeleme/görüntüleme niyeti olmalı
+    "klasör", "listele", "listeler", "dizin", "içindeki",
+    "read_file", "dosyaları göster", "dosyaları listele",
+    "proje dosyaları", "proje dizini", "proje klasörü",
+    # İngilizce
+    "folder", "directory", "list files", "list directory", "show files",
+    "read file", "open file", "project files",
 )
 _CODE_SIGNALS = (
-    "kod", "python", "javascript", "typescript", "react", "fastapi",
-    "api", "fonksiyon", "class", "debug", "hata ayıkla", "refactor",
-    "implement", "sql", "git", "npm", "pip",
+    # Türkçe
+    "kod", "fonksiyon", "hata ayıkla", "refactor", "yaz", "oluştur",
+    "proje oluştur", "uygulama yaz", "script yaz",
+    # İngilizce + evrensel
+    "python", "javascript", "typescript", "react", "fastapi", "html", "css",
+    "api", "class", "debug", "implement", "sql", "git", "npm", "pip",
+    "function", "write code", "fix bug", "unit test", "dockerfile",
+    "bash", "shell script", "create project", "build", "website",
 )
 _WEATHER_SIGNALS = (
-    "hava durumu", "hava nasıl", "yağmur", "kar yağ", "derece",
-    "sıcaklık", "weather", "forecast", "meteoroloji",
+    # Türkçe
+    "hava durumu", "hava nasıl", "yağmur", "kar yağ", "derece", "sıcaklık",
+    # İngilizce
+    "weather", "forecast", "meteoroloji", "temperature", "rain", "snow",
 )
 _REASONING_SIGNALS = (
+    # Türkçe
     "karşılaştır", "analiz", "mimari", "tasarla", "neden", "avantaj",
     "dezavantaj", "trade-off", "planla", "strateji", "adım adım açıkla",
+    # İngilizce
+    "compare", "analyze", "analysis", "architecture", "design", "why",
+    "pros and cons", "plan", "strategy", "explain step by step",
 )
 _TURKISH_CHARS = set("ğıüşöçİĞÜŞÖÇ")
 
@@ -202,7 +218,16 @@ class ModelRouter:
             )
 
         task = classify_task(message, history)
-        prefer_local = task in (TASK_FILE_OPS, TASK_CODING)
+
+        # Yaratma/üretme niyeti varsa bulut model tercih edilir (yerel model yetersiz kalır)
+        _creation_signals = (
+            "oluştur", "yaz", "yap", "üret", "oluşturun",
+            "create", "build", "generate", "make", "implement", "write",
+        )
+        is_creation = any(s in message.lower() for s in _creation_signals)
+
+        # Dosya işlemleri her zaman yerel; kodlama yalnızca basit sorgularda yerel
+        prefer_local = task == TASK_FILE_OPS or (task == TASK_CODING and not is_creation)
 
         entry = self.pick_for_task(task, prefer_local=prefer_local)
         if not entry:

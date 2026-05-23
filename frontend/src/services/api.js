@@ -36,3 +36,27 @@ export const fetchModels = async () => {
   if (!res.ok) throw new Error('Modeller getirilemedi');
   return await res.json();
 };
+
+export const fetchProducts = async () => {
+  const res = await fetch(`${API_BASE_URL}/products`);
+  if (!res.ok) throw new Error('Ürünler getirilemedi');
+  return await res.json();
+};
+
+export const createProduct = async (data) => {
+  const res = await fetch(`${API_BASE_URL}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Ürün oluşturulamadı');
+  return await res.json();
+};
+
+export const deleteProduct = async (productId) => {
+  const res = await fetch(`${API_BASE_URL}/products/${productId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Ürün silinemedi');
+  return await res.json();
+};

@@ -8,13 +8,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from routers.chat import router as chat_router
 from routers.models import router as models_router
+from routers.products import router as products_router
 from services.chat_history import chat_history
+from services.product_store import product_store
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Uygulama başlarken SQLite tablolarını oluştur."""
+    """Uygulama başlarken veritabanı tablolarını oluştur."""
     await chat_history.init_db()
+    await product_store.init_table()
     yield
 
 
@@ -28,7 +31,11 @@ app = FastAPI(
 # CORS — Frontend'in backend'e erişebilmesi için
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -37,6 +44,7 @@ app.add_middleware(
 # Router'ları bağla
 app.include_router(chat_router, prefix="/api/chat", tags=["Sohbet"])
 app.include_router(models_router, prefix="/api", tags=["Modeller"])
+app.include_router(products_router, prefix="/api", tags=["Ürünler"])
 
 
 @app.get("/")

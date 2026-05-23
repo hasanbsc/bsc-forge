@@ -35,22 +35,13 @@ class Settings:
     DEFAULT_MODEL: str = "gemini-2.5-flash"
 
     def is_gemini_configured(self) -> bool:
-        return bool(self.GEMINI_API_KEY and self.GEMINI_API_KEY != "buraya-gemini-anahtarini-yaz")
+        return bool(self.GEMINI_API_KEY)
 
     def is_groq_configured(self) -> bool:
-        return bool(self.GROQ_API_KEY and self.GROQ_API_KEY != "buraya-groq-anahtarini-yaz")
+        return bool(self.GROQ_API_KEY)
 
     def is_deepseek_configured(self) -> bool:
-        return bool(self.DEEPSEEK_API_KEY and self.DEEPSEEK_API_KEY != "buraya-deepseek-anahtarini-yaz")
+        return bool(self.DEEPSEEK_API_KEY)
 
 
 settings = Settings()
-
-
-def reload_env() -> None:
-    """.env değişikliklerini çalışan sürece yansıt (backend yeniden başlatmadan)."""
-    load_dotenv(ENV_PATH, override=True)
-    settings.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-    settings.GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-    settings.OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    settings.DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")

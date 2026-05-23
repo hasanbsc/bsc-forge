@@ -43,7 +43,10 @@ CLOUD_MODELS: list[ModelEntry] = [
         model="gemini-2.5-flash",
         label="Gemini 2.5 Flash",
         type="cloud",
-        tasks=frozenset({TASK_TURKISH, TASK_ENGLISH, TASK_FAST, TASK_REASONING, TASK_WEATHER}),
+        tasks=frozenset({
+            TASK_TURKISH, TASK_ENGLISH, TASK_FAST, TASK_REASONING, TASK_WEATHER,
+            TASK_CODING, TASK_FILE_OPS,
+        }),
         priority=10,
     ),
     ModelEntry(

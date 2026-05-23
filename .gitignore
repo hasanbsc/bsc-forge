@@ -41,3 +41,6 @@ Thumbs.db
 .idea/
 *.swp
 *~
+
+# Claude Code local settings (kişisel izinler)
+.claude/settings.local.json

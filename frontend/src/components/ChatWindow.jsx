@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, User, Flame, Wrench, Cloud, Cpu, Sparkles } from 'lucide-react';
+import { Send, User, Flame, Wrench, Cloud, Cpu, Sparkles, FolderOpen, FileX, ArrowUp, ArrowDown } from 'lucide-react';
 import { ChatWebSocket } from '../services/websocket';
+
+const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const fmtTok = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
 
 function resolveModelDisplay(provider, model, models) {
   if (provider === 'auto') {
@@ -30,24 +33,29 @@ function ModelActiveIcon({ modelType, provider }) {
   return <Cloud size={12} />;
 }
 
-export default function ChatWindow({ 
-  currentSession, 
-  messages, 
+export default function ChatWindow({
+  currentSession,
+  messages,
   setMessages,
   provider,
   model,
   models = [],
-  isConnected 
+  activeProductId = 'forge',
 }) {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeModel, setActiveModel] = useState(null);
+  const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 });
+  const [pendingApproval, setPendingApproval] = useState(null);
+  const [approvalPath, setApprovalPath] = useState('');
+  const [approvalError, setApprovalError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const streamIndexRef = useRef(null);
   const wsGenerationRef = useRef(0);
+  const activeModelRef = useRef(null);
 
-  // Otomatik aşağı kaydır
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -59,9 +67,9 @@ export default function ChatWindow({
   // WebSocket kurulumu (Strict Mode çift bağlantıya karşı nesil kilidi)
   useEffect(() => {
     const generation = ++wsGenerationRef.current;
-    let opened = false;
 
     const ws = new ChatWebSocket(
+      // onToken
       (token) => {
         if (generation !== wsGenerationRef.current) return;
         setMessages(prev => {
@@ -73,23 +81,29 @@ export default function ChatWindow({
             newMessages[idx].role !== 'assistant' ||
             !newMessages[idx].isStreaming
           ) {
-            newMessages.push({ role: 'assistant', content: '', isStreaming: true });
+            newMessages.push({ id: genId(), role: 'assistant', content: '', isStreaming: true });
             idx = newMessages.length - 1;
             streamIndexRef.current = idx;
           }
-          newMessages[idx] = {
-            ...newMessages[idx],
-            content: newMessages[idx].content + token,
-          };
+          newMessages[idx] = { ...newMessages[idx], content: newMessages[idx].content + token };
           return newMessages;
         });
       },
-      () => {
+      // onDone
+      (usage) => {
         if (generation !== wsGenerationRef.current) return;
         const idx = streamIndexRef.current;
+        const capturedModel = activeModelRef.current;
         streamIndexRef.current = null;
+        activeModelRef.current = null;
         setIsStreaming(false);
         setActiveModel(null);
+        if (usage) {
+          setSessionTokens(prev => ({
+            input: prev.input + usage.input,
+            output: prev.output + usage.output,
+          }));
+        }
         setMessages(prev => {
           const newMessages = [...prev];
           const target =
@@ -97,34 +111,63 @@ export default function ChatWindow({
               ? idx
               : newMessages.length - 1;
           if (target >= 0 && newMessages[target]?.role === 'assistant') {
-            newMessages[target] = { ...newMessages[target], isStreaming: false };
+            newMessages[target] = {
+              ...newMessages[target],
+              isStreaming: false,
+              usage: usage || null,
+              modelLabel: capturedModel?.label || null,
+            };
           }
           return newMessages;
         });
       },
+      // onError
       (error) => {
-        if (generation !== wsGenerationRef.current || opened) return;
+        if (generation !== wsGenerationRef.current) return;
         setIsStreaming(false);
         setActiveModel(null);
-        setMessages(prev => [...prev, { role: 'assistant', content: `**HATA:** ${error}` }]);
+        streamIndexRef.current = null;
+        setMessages(prev => [
+          ...prev,
+          { id: genId(), role: 'assistant', content: `**HATA:** ${error}` },
+        ]);
       },
+      // onTool
       (toolMsg) => {
         if (generation !== wsGenerationRef.current) return;
         streamIndexRef.current = null;
-        setMessages(prev => [...prev, { role: 'tool', content: toolMsg }]);
+        setMessages(prev => [...prev, { id: genId(), role: 'tool', content: toolMsg }]);
       },
-      () => {
-        opened = true;
-      },
+      // onOpen
+      () => {},
+      // onModelActive
       (info) => {
         if (generation !== wsGenerationRef.current) return;
-        setActiveModel({
+        const m = {
           label: info.label,
           provider: info.provider,
           model: info.model,
           model_type: info.model_type || (info.provider === 'ollama' ? 'local' : 'cloud'),
-        });
-      }
+        };
+        setActiveModel(m);
+        activeModelRef.current = m;
+      },
+      // onDisconnect — WS kopunca streaming'i zorla sıfırla
+      () => {
+        if (generation !== wsGenerationRef.current) return;
+        setIsStreaming(false);
+        setActiveModel(null);
+        streamIndexRef.current = null;
+      },
+      // onApprovalRequest — dosya yazma onayı bekliyor
+      (data) => {
+        if (generation !== wsGenerationRef.current) return;
+        setIsStreaming(false);
+        setActiveModel(null);
+        streamIndexRef.current = null;
+        setPendingApproval(data);
+        setApprovalPath(data.path || '');
+      },
     );
 
     ws.connect();
@@ -143,24 +186,85 @@ export default function ChatWindow({
 
     const userMsg = input.trim();
     setInput('');
-    
-    // Yalnızca geçerli sohbet rolleri (araç/hata satırları hariç)
+
     const history = messages
-      .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.content?.startsWith('**HATA:**'))
+      .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isError)
       .map(m => ({ role: m.role, content: m.content }));
 
     streamIndexRef.current = null;
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setMessages(prev => [...prev, { id: genId(), role: 'user', content: userMsg }]);
     setIsStreaming(true);
     setActiveModel(resolveModelDisplay(provider, model, models));
 
     wsRef.current.sendMessage(
-      userMsg, 
-      currentSession?.id, 
-      provider, 
+      userMsg,
+      currentSession?.id,
+      provider,
       model,
-      history
+      history,
+      'manual',
+      activeProductId,
     );
+  };
+
+  const handleReject = () => {
+    if (!pendingApproval || !wsRef.current?.isConnected) return;
+    wsRef.current.sendApproval(
+      pendingApproval.path,
+      false,
+      currentSession?.id,
+      activeProductId,
+      '',
+    );
+    setIsStreaming(true);
+    setPendingApproval(null);
+    setApprovalPath('');
+    setApprovalError('');
+  };
+
+  const handlePickAndSave = async () => {
+    if (!pendingApproval || !wsRef.current?.isConnected) return;
+    if (!window.showDirectoryPicker) {
+      setApprovalError('Bu tarayıcı klasör seçmeyi desteklemiyor. Chrome veya Edge kullanın.');
+      return;
+    }
+    if (!approvalPath.trim()) {
+      setApprovalError('Dosya adı boş olamaz.');
+      return;
+    }
+
+    setApprovalError('');
+    setIsSaving(true);
+    try {
+      const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      const parts = approvalPath.split('/').filter(Boolean);
+      const filename = parts.pop();
+      let target = dirHandle;
+      for (const sub of parts) {
+        target = await target.getDirectoryHandle(sub, { create: true });
+      }
+      const fileHandle = await target.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(pendingApproval.content);
+      await writable.close();
+
+      wsRef.current.sendApproval(
+        approvalPath,
+        true,
+        currentSession?.id,
+        activeProductId,
+        dirHandle.name,
+      );
+      setIsStreaming(true);
+      setPendingApproval(null);
+      setApprovalPath('');
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        setApprovalError(`Kaydedilemedi: ${err.message}`);
+      }
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -178,7 +282,7 @@ export default function ChatWindow({
         </div>
         <h1 className="welcome-title">BSC Forge'a Hoş Geldiniz</h1>
         <p className="welcome-subtitle">Kişisel yapay zeka portalınız. Yeni bir ürün yaratmak veya soru sormak için yazmaya başlayın.</p>
-        
+
         <div className="welcome-suggestions">
           <button className="welcome-suggestion" onClick={() => setInput('Bana BSC Forge hakkında bilgi ver.')}>
             Bana BSC Forge hakkında bilgi ver
@@ -201,8 +305,8 @@ export default function ChatWindow({
     <>
       <div className="chat-messages">
         <div className="chat-messages-inner">
-          {messages.map((msg, index) => (
-            <div key={index} className={`message ${msg.role === 'tool' ? 'message-tool-row' : ''}`}>
+          {messages.map((msg) => (
+            <div key={msg.id} className={`message ${msg.role === 'tool' ? 'message-tool-row' : ''}`}>
               <div className={`message-avatar ${msg.role}`}>
                 {msg.role === 'user' ? <User size={18} /> : msg.role === 'tool' ? <Wrench size={16} /> : <Flame size={20} />}
               </div>
@@ -220,9 +324,60 @@ export default function ChatWindow({
                   )}
                   {msg.isStreaming && <span className="streaming-cursor"></span>}
                 </div>
+                {!msg.isStreaming && msg.usage && (
+                  <div className="message-token-meta">
+                    {msg.modelLabel && (
+                      <span className="token-chip token-chip-model">
+                        <Sparkles size={10} /> {msg.modelLabel}
+                      </span>
+                    )}
+                    <span className="token-chip" title="Girdi tokenları">
+                      <ArrowUp size={10} /> {fmtTok(msg.usage.input)}
+                    </span>
+                    <span className="token-chip" title="Çıktı tokenları">
+                      <ArrowDown size={10} /> {fmtTok(msg.usage.output)}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
+          {pendingApproval && (
+            <div className="approval-card">
+              <div className="approval-header">
+                <span className="approval-icon">📥</span>
+                <div className="approval-header-text">
+                  <div className="approval-title">Dosya Kaydetme Onayı</div>
+                  <div className="approval-path-hint">Klasör seçeceksiniz; dosya bilgisayarınıza kaydedilir.</div>
+                </div>
+              </div>
+              <div className="approval-path-row">
+                <label className="approval-path-label">Dosya adı</label>
+                <input
+                  className="approval-path-input"
+                  value={approvalPath}
+                  onChange={(e) => setApprovalPath(e.target.value)}
+                  placeholder="örn. index.html"
+                  spellCheck={false}
+                />
+              </div>
+              <pre className="approval-preview">{pendingApproval.preview}</pre>
+              {approvalError && <div className="approval-error">{approvalError}</div>}
+              <div className="approval-actions">
+                <button
+                  className="approval-btn-accept"
+                  onClick={handlePickAndSave}
+                  disabled={!approvalPath.trim() || isSaving}
+                >
+                  <FolderOpen size={15} /> {isSaving ? 'Kaydediliyor…' : 'Klasör Seç ve Kaydet'}
+                </button>
+                <button className="approval-btn-reject" onClick={handleReject} disabled={isSaving}>
+                  <FileX size={15} /> Reddet
+                </button>
+              </div>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -247,8 +402,8 @@ export default function ChatWindow({
               rows={1}
               disabled={isStreaming}
             />
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="chat-send-btn"
               disabled={!input.trim() || isStreaming || !wsRef.current?.isConnected}
             >
@@ -256,11 +411,23 @@ export default function ChatWindow({
             </button>
           </form>
           <div className="chat-input-hint">
-            {isStreaming 
-              ? 'Ajan yanıtlıyor...' 
-              : wsRef.current?.isConnected 
-                ? 'Göndermek için Enter, yeni satır için Shift+Enter basın.' 
-                : 'Sunucuya bağlanılıyor...'}
+            <span className="hint-text">
+              {isStreaming
+                ? 'Ajan yanıtlıyor...'
+                : wsRef.current?.isConnected
+                  ? 'Enter gönderir · Shift+Enter yeni satır'
+                  : 'Sunucuya bağlanılıyor...'}
+            </span>
+            {sessionTokens.output > 0 && (
+              <span className="hint-tokens">
+                <span className="hint-token-item" title="Bu oturumdaki toplam girdi tokenı">
+                  <ArrowUp size={10} /> {fmtTok(sessionTokens.input)}
+                </span>
+                <span className="hint-token-item" title="Bu oturumdaki toplam çıktı tokenı">
+                  <ArrowDown size={10} /> {fmtTok(sessionTokens.output)}
+                </span>
+              </span>
+            )}
           </div>
         </div>
       </div>

@@ -10,7 +10,7 @@ from google import genai
 from google.genai import types
 from groq import AsyncGroq
 
-from config import settings, reload_env
+from config import settings
 from services.llm_manager import llm_manager
 from services.provider_utils import (
     cascade_from,
@@ -21,7 +21,7 @@ from services.provider_utils import (
     model_for_provider,
     PROVIDER_LABELS,
 )
-from services.tools import TOOL_SCHEMAS, execute_tool
+from services.tools import TOOL_SCHEMAS, execute_tool, write_file
 
 MAX_AGENT_STEPS = 2
 
@@ -44,9 +44,21 @@ Canlı/gerçek zamanlı veri gerektiren durumlarda (anlık hava, borsa fiyatı v
 Ardından uygun ücretsiz/açık API öner.
 
 ## Ne zaman araç kullanırsın
-- Kullanıcı proje dizinindeki dosya veya klasör hakkında soru sorduğunda
-- list_directory: klasör içeriğini listele
-- read_file: dosya içeriğini oku
+- list_directory: klasör içeriğini listele (sadece kullanıcı içeriği görmek istediğinde)
+- read_file: belirli bir dosyanın içeriğini oku (kullanıcı o dosyayı sorduğunda)
+- write_file: dosya oluştur veya güncelle (kullanıcı onayı gerektirir)
+
+## Dosya/sayfa/kod oluşturma kuralları (ÇOK ÖNEMLİ)
+Kullanıcı bir dosya, web sayfası, HTML, CSS, kod parçası veya site üretmeni
+istediğinde **doğrudan write_file aracını çağır**. Tasarımı veya yapıyı önce
+metin olarak anlatma; içeriği hazırla ve write_file ile yaz.
+
+- "X.html oluştur" → write_file(path="X.html", content="<tam HTML kodu>")
+- "Bir landing page yap" → write_file(path="index.html", content="<...>")
+- "Bana bir Python script yaz" → write_file(path="script.py", content="<...>")
+
+Önce list_directory veya read_file çağırma — gereksizdir. Kullanıcı zaten onay
+verecek ve istediği yola taşıyabilecek.
 
 ## Kurallar
 - Görmediğin dosya içeriğini tahmin etme; araçla oku.
@@ -155,6 +167,9 @@ class ForgeAgent:
         if name == "read_file":
             path = args.get("path", "")
             return f"📄 Dosya okunuyor: `{path}`"
+        if name == "write_file":
+            path = args.get("path", "")
+            return f"✏️ Dosya yazılıyor: `{path}`"
         return f"🔧 {name}"
 
     def _gemini_tools(self) -> list[types.Tool]:
@@ -386,18 +401,28 @@ class ForgeAgent:
         ):
             yield event
 
+    def _build_messages_with_prompt(
+        self, user_message: str, history: list[dict], system_prompt: str | None
+    ) -> list[dict]:
+        prompt = system_prompt or SYSTEM_PROMPT.format(workspace=settings.WORKSPACE_ROOT)
+        messages = [{"role": "system", "content": prompt}]
+        for msg in history:
+            if msg.get("role") in ("user", "assistant"):
+                messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": user_message})
+        return messages
+
     async def run(
         self,
         user_message: str,
         history: list[dict],
         provider: str = "gemini",
         model: str | None = None,
+        system_prompt: str | None = None,
+        tools_enabled: list[str] | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Ajan döngüsü. Olaylar: tool, token, error."""
-        reload_env()
-        llm_manager._reset_clients()
-
-        messages = self._build_messages(user_message, history)
+        messages = self._build_messages_with_prompt(user_message, history, system_prompt)
 
         # Basit aritmetik sorularını yerelde çöz (hızlı cevap, dış API çağrısı yok)
         math_answer = self._try_simple_math(user_message)
@@ -406,6 +431,11 @@ class ForgeAgent:
             return
         effective_provider = provider
         effective_model = model
+
+        # Ürün konfigürasyonuna göre izin verilen araçlar
+        allowed_tools: set[str] | None = (
+            set(tools_enabled) if tools_enabled is not None else None
+        )
 
         tools_used = False
         only_list_tools = True
@@ -445,12 +475,33 @@ class ForgeAgent:
                 tools_used = True
                 seen: set[str] = set()
                 for call in step.tool_calls:
+                    # Ürünün izin vermediği araçları atla
+                    if allowed_tools is not None and call.name not in allowed_tools:
+                        continue
                     if call.name != "list_directory":
                         only_list_tools = False
                     key = f"{call.name}:{json.dumps(call.args, sort_keys=True, ensure_ascii=False)}"
                     if key in seen:
                         continue
                     seen.add(key)
+
+                    # write_file → onay gerektirir; frontend'e bildir ve dur
+                    if call.name == "write_file":
+                        path = call.args.get("path", "")
+                        content = call.args.get("content", "")
+                        preview_lines = content.split("\n")[:25]
+                        preview = "\n".join(preview_lines)
+                        if len(content.split("\n")) > 25:
+                            preview += f"\n… ({len(content.split(chr(10))) - 25} satır daha)"
+                        yield {
+                            "type": "approval_request",
+                            "tool": "write_file",
+                            "path": path,
+                            "content": content,
+                            "preview": preview,
+                        }
+                        return  # Agent durur; WebSocket onay yanıtını bekler
+
                     yield {"type": "tool", "content": self._tool_label(call.name, call.args)}
                     result = execute_tool(call.name, call.args)
                     self._append_tool_exchange(messages, call, result)

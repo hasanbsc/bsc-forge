@@ -56,7 +56,10 @@ def is_fallbackable_error(exc: BaseException | str) -> bool:
     if is_quota_or_rate_limit(text):
         return True
     # Geçici sunucu hataları
-    return any(x in text for x in ("503", "502", "504", "unavailable", "overloaded"))
+    if any(x in text for x in ("503", "502", "504", "unavailable", "overloaded")):
+        return True
+    # Groq/Llama bazen tool çağrısı formatını bozar (400 tool_use_failed) — fallback'le
+    return "tool_use_failed" in text or "failed to call a function" in text
 
 
 def is_auth_error(exc: BaseException | str) -> bool:

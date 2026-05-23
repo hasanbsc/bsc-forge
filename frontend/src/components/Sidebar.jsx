@@ -1,12 +1,14 @@
 import React from 'react';
-import { Plus, MessageSquare, Flame, Trash2 } from 'lucide-react';
+import { Plus, MessageSquare, Flame, Trash2, LayoutGrid } from 'lucide-react';
 
-export default function Sidebar({ 
-  sessions, 
-  currentSession, 
-  onSelectSession, 
+export default function Sidebar({
+  sessions,
+  currentSession,
+  onSelectSession,
   onNewSession,
   onDeleteSession,
+  view,
+  onViewChange,
 }) {
   return (
     <div className="sidebar">
@@ -23,36 +25,53 @@ export default function Sidebar({
         </button>
       </div>
 
-      <div className="sidebar-sessions">
-        <div className="sidebar-section-title">Son Sohbetler</div>
-        {sessions.map(session => (
-          <div 
-            key={session.id}
-            className={`session-item ${currentSession?.id === session.id ? 'active' : ''}`}
-            onClick={() => onSelectSession(session)}
-          >
-            <MessageSquare size={16} className="session-item-icon" />
-            <div className="session-item-text">{session.title}</div>
-            <button
-              type="button"
-              className="session-delete-btn"
-              title="Sohbeti sil"
-              aria-label={`${session.title} sohbetini sil`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteSession(session);
-              }}
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        ))}
-        {sessions.length === 0 && (
-          <div style={{ padding: '12px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            Henüz geçmiş sohbet yok.
-          </div>
-        )}
+      <div className="sidebar-nav">
+        <button
+          className={`sidebar-nav-btn ${view === 'chat' ? 'active' : ''}`}
+          onClick={() => onViewChange('chat')}
+        >
+          <MessageSquare size={15} /> Sohbet
+        </button>
+        <button
+          className={`sidebar-nav-btn ${view === 'products' ? 'active' : ''}`}
+          onClick={() => onViewChange('products')}
+        >
+          <LayoutGrid size={15} /> Ürünler
+        </button>
       </div>
+
+      {view === 'chat' && (
+        <div className="sidebar-sessions">
+          <div className="sidebar-section-title">Son Sohbetler</div>
+          {sessions.map(session => (
+            <div
+              key={session.id}
+              className={`session-item ${currentSession?.id === session.id ? 'active' : ''}`}
+              onClick={() => onSelectSession(session)}
+            >
+              <MessageSquare size={16} className="session-item-icon" />
+              <div className="session-item-text">{session.title}</div>
+              <button
+                type="button"
+                className="session-delete-btn"
+                title="Sohbeti sil"
+                aria-label={`${session.title} sohbetini sil`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteSession(session);
+                }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+          {sessions.length === 0 && (
+            <div style={{ padding: '12px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Henüz geçmiş sohbet yok.
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="sidebar-footer">
         <div className="session-item" style={{ marginBottom: 0 }}>
