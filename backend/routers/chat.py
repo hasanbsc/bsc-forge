@@ -110,7 +110,8 @@ async def chat_websocket(websocket: WebSocket):
                 await websocket.send_json({"type": "token", "content": msg})
                 if sid:
                     await chat_history.add_message(sid, "assistant", msg)
-                await websocket.send_json({"type": "done", "content": ""})
+                # "done" event'i göndermiyoruz — agent.run kendisi yayıyor zaten
+                # ve birden fazla "done" frontend'in queue mantığını karıştırır
                 continue
 
             message = data.get("message", "")

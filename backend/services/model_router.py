@@ -89,9 +89,22 @@ class RouteDecision:
         }
 
 
+_TR_STOPWORDS = {
+    "ve", "veya", "ile", "bir", "bu", "şu", "için", "ben", "sen", "biz", "siz",
+    "bana", "sana", "bize", "size", "ona", "onlara", "ne", "nasıl", "neden",
+    "kim", "nerede", "nereye", "ama", "fakat", "çünkü", "gibi", "kadar", "ise",
+    "değil", "yok", "var", "olarak", "hakkında", "üzerine", "sonra", "önce",
+    "bilgi", "yap", "yaz", "ver", "söyle", "açıkla", "anlat", "göster",
+}
+
+
 def _detect_language(text: str) -> str:
     lower = text.lower()
-    if sum(1 for c in text if c in _TURKISH_CHARS) >= 2:
+    # Türkçe karakter veya Türkçe stopword varsa Türkçe say
+    if any(c in _TURKISH_CHARS for c in text):
+        return "tr"
+    tokens = re.findall(r"[a-zA-ZğıüşöçİĞÜŞÖÇ']+", lower)
+    if any(tok in _TR_STOPWORDS for tok in tokens):
         return "tr"
     en_markers = (
         r"\b(hello|hi|the|and|what|how|why|please|explain|write|code|weather)\b"
@@ -99,8 +112,7 @@ def _detect_language(text: str) -> str:
     if re.search(en_markers, lower):
         return "en"
     # Çoğunlukla ASCII kelime → İngilizce ihtimali
-    words = re.findall(r"[a-zA-Z']+", text)
-    if len(words) >= 3 and sum(1 for w in words if w.isascii()) / len(words) > 0.85:
+    if len(tokens) >= 3 and sum(1 for w in tokens if w.isascii()) / len(tokens) > 0.85:
         return "en"
     return "tr"
 
@@ -219,15 +231,31 @@ class ModelRouter:
 
         task = classify_task(message, history)
 
-        # Yaratma/üretme niyeti varsa bulut model tercih edilir (yerel model yetersiz kalır)
+        # Yaratma/üretme niyeti — bulut tercih edilir
         _creation_signals = (
-            "oluştur", "yaz", "yap", "üret", "oluşturun",
+            "oluştur", "yaz", "yap", "üret", "oluşturun", "kodla", "tasarla",
             "create", "build", "generate", "make", "implement", "write",
         )
-        is_creation = any(s in message.lower() for s in _creation_signals)
+        # Düzenleme niyeti — uzun düzenleme bulut, kısa+net düzenleme yerel olabilir
+        _edit_signals = (
+            "düzenle", "değiştir", "değişiklik", "düzelt", "güncelle", "yenile",
+            "ekle", "çıkar", "kaldır", "geliştir", "iyileştir",
+            "refactor", "rename", "fix", "edit", "modify", "update", "patch",
+        )
+        msg_lower = message.lower()
+        is_creation = any(s in msg_lower for s in _creation_signals)
+        is_edit = any(s in msg_lower for s in _edit_signals)
+        word_count = len(message.split())
 
-        # Dosya işlemleri her zaman yerel; kodlama yalnızca basit sorgularda yerel
-        prefer_local = task == TASK_FILE_OPS or (task == TASK_CODING and not is_creation)
+        # Dosya işlemleri her zaman yerel.
+        # Kodlamada **varsayılan bulut**. Yerel yalnızca: belirgin küçük
+        # düzenleme + yaratma niyeti yok + kısa istek (< 15 kelime).
+        prefer_local = task == TASK_FILE_OPS or (
+            task == TASK_CODING
+            and is_edit
+            and not is_creation
+            and word_count < 15
+        )
 
         entry = self.pick_for_task(task, prefer_local=prefer_local)
         if not entry:

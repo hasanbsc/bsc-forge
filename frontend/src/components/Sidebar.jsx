@@ -4,6 +4,8 @@ import { Plus, MessageSquare, Flame, Trash2, LayoutGrid } from 'lucide-react';
 export default function Sidebar({
   sessions,
   currentSession,
+  isOpen,
+  onClose,
   onSelectSession,
   onNewSession,
   onDeleteSession,
@@ -11,7 +13,7 @@ export default function Sidebar({
   onViewChange,
 }) {
   return (
-    <div className="sidebar">
+    <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">⚒</div>

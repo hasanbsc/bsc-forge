@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Code2, Menu } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import ModelSelector from './components/ModelSelector';
+import CodePanel from './components/CodePanel/CodePanel';
 import ProductsPage from './pages/ProductsPage';
 import { fetchSessions, createSession, fetchSessionMessages, fetchModels, deleteSession, fetchProducts } from './services/api';
 
@@ -20,6 +22,69 @@ export default function App() {
   const [view, setView] = useState('chat'); // 'chat' | 'products'
   const [products, setProducts] = useState([]);
   const [activeProductId, setActiveProductId] = useState('forge');
+
+  // Codex tarzı kod paneli
+  const [panelFiles, setPanelFiles] = useState([]);
+  const [activeFilePath, setActiveFilePath] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(560);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const dragState = useRef(null);
+
+  const handleFileTouched = useCallback((path, content) => {
+    if (!path) return;
+    setPanelFiles((prev) => {
+      const idx = prev.findIndex((f) => f.path === path);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], content: content ?? '' };
+        return next;
+      }
+      return [...prev, { path, content: content ?? '' }];
+    });
+    setActiveFilePath(path);
+    setPanelOpen(true);
+  }, []);
+
+  const handleSelectTab = useCallback((path) => setActiveFilePath(path), []);
+
+  const handleCloseTab = useCallback((path) => {
+    setPanelFiles((prev) => {
+      const next = prev.filter((f) => f.path !== path);
+      if (path === activeFilePath) {
+        setActiveFilePath(next.length ? next[next.length - 1].path : null);
+      }
+      if (next.length === 0) setPanelOpen(false);
+      return next;
+    });
+  }, [activeFilePath]);
+
+  const startResize = useCallback((e) => {
+    dragState.current = { startX: e.clientX, startWidth: panelWidth };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [panelWidth]);
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragState.current) return;
+      const dx = dragState.current.startX - e.clientX;
+      const next = Math.min(Math.max(dragState.current.startWidth + dx, 320), window.innerWidth - 480);
+      setPanelWidth(next);
+    };
+    const onUp = () => {
+      if (!dragState.current) return;
+      dragState.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, []);
 
   // Başlangıçta modelleri ve sohbet geçmişini yükle
   useEffect(() => {
@@ -70,9 +135,11 @@ export default function App() {
       setSessions([newSession, ...sessions]);
       setCurrentSession(newSession);
       setActiveProductId(productId);
+      return newSession;
     } catch (err) {
       console.error("Oturum oluşturulamadı:", err);
       setSessionError('Yeni sohbet oluşturulamadı. Backend çalışıyor mu? (python3 main.py)');
+      return null;
     }
   };
 
@@ -118,16 +185,23 @@ export default function App() {
     }
   };
 
+  const closeSidebar = () => setSidebarOpen(false);
+
   return (
     <div className="app-layout">
+      {sidebarOpen && (
+        <div className="sidebar-overlay" onClick={closeSidebar} />
+      )}
       <Sidebar
         sessions={sessions}
         currentSession={currentSession}
-        onSelectSession={handleSelectSession}
-        onNewSession={() => handleNewSession('forge')}
+        isOpen={sidebarOpen}
+        onClose={closeSidebar}
+        onSelectSession={(session) => { handleSelectSession(session); closeSidebar(); setView('chat'); }}
+        onNewSession={() => { handleNewSession('forge'); closeSidebar(); }}
         onDeleteSession={handleDeleteSession}
         view={view}
-        onViewChange={setView}
+        onViewChange={(v) => { setView(v); closeSidebar(); }}
       />
       
       <main className="main-content">
@@ -147,10 +221,29 @@ export default function App() {
               </div>
             )}
             <header className="chat-header">
+              <button
+                type="button"
+                className="mobile-menu-btn"
+                onClick={() => setSidebarOpen(v => !v)}
+                aria-label="Menüyü aç"
+              >
+                <Menu size={20} />
+              </button>
               <div className="chat-header-title">
                 {currentSession ? currentSession.title : 'Yeni Sohbet'}
               </div>
               <div className="chat-header-actions">
+                <button
+                  type="button"
+                  className={`code-panel-toggle ${panelOpen ? 'active' : ''}`}
+                  onClick={() => setPanelOpen((v) => !v)}
+                  title="Kod panelini aç/kapat"
+                >
+                  <Code2 size={14} /> Kod Paneli
+                  {panelFiles.length > 0 && (
+                    <span className="badge">{panelFiles.length}</span>
+                  )}
+                </button>
                 {modelError ? (
                   <span className="model-error-hint">⚠ Model listesi yüklenemedi — backend çalışıyor mu?</span>
                 ) : models.length > 0 ? (
@@ -171,10 +264,29 @@ export default function App() {
               model={model}
               models={models}
               activeProductId={activeProductId}
+              onNewSession={() => handleNewSession('forge')}
+              onFileTouched={handleFileTouched}
             />
           </>
         )}
       </main>
+
+      {panelOpen && view === 'chat' && (
+        <aside className="code-panel-host" style={{ width: panelWidth }}>
+          <div
+            className="code-panel-resizer"
+            onMouseDown={startResize}
+            title="Boyutu sürükleyerek değiştir"
+          />
+          <CodePanel
+            files={panelFiles}
+            activePath={activeFilePath}
+            onSelectTab={handleSelectTab}
+            onCloseTab={handleCloseTab}
+            onClose={() => setPanelOpen(false)}
+          />
+        </aside>
+      )}
     </div>
   );
 }

@@ -5,14 +5,16 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    allowedHosts: true,
     proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
       '/api/chat/ws': {
         target: 'ws://localhost:8000',
         ws: true,
+        changeOrigin: true,
+      },
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
       },
     },
   },

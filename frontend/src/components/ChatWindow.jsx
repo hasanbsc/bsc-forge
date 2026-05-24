@@ -41,20 +41,26 @@ export default function ChatWindow({
   model,
   models = [],
   activeProductId = 'forge',
+  onNewSession,
+  onFileTouched,
 }) {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeModel, setActiveModel] = useState(null);
   const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 });
-  const [pendingApproval, setPendingApproval] = useState(null);
+  const [approvalQueue, setApprovalQueue] = useState([]); // dosya onay kuyruğu (çoklu dosya için)
   const [approvalPath, setApprovalPath] = useState('');
   const [approvalError, setApprovalError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [batchSaveAll, setBatchSaveAll] = useState(false); // "Tümünü kabul et" modu
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const streamIndexRef = useRef(null);
   const wsGenerationRef = useRef(0);
   const activeModelRef = useRef(null);
+  const savedDirHandleRef = useRef(null); // İlk seçimden sonra aynı klasör kullanılır
+
+  const pendingApproval = approvalQueue[0] || null;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -159,14 +165,20 @@ export default function ChatWindow({
         setActiveModel(null);
         streamIndexRef.current = null;
       },
-      // onApprovalRequest — dosya yazma onayı bekliyor
+      // onApprovalRequest — dosya yazma onayı bekliyor (çoklu dosya kuyruğu)
       (data) => {
         if (generation !== wsGenerationRef.current) return;
         setIsStreaming(false);
         setActiveModel(null);
         streamIndexRef.current = null;
-        setPendingApproval(data);
-        setApprovalPath(data.path || '');
+        setApprovalQueue((prev) => {
+          const next = [...prev, data];
+          if (prev.length === 0) {
+            setApprovalPath(data.path || '');
+          }
+          return next;
+        });
+        if (data?.path) onFileTouched?.(data.path, data.content || '');
       },
     );
 
@@ -180,11 +192,9 @@ export default function ChatWindow({
     };
   }, []);
 
-  const handleSend = (e) => {
-    e.preventDefault();
-    if (!input.trim() || isStreaming || !wsRef.current?.isConnected) return;
-
-    const userMsg = input.trim();
+  const sendText = (text, overrideSessionId) => {
+    const userMsg = (text || '').trim();
+    if (!userMsg || isStreaming || !wsRef.current?.isConnected) return;
     setInput('');
 
     const history = messages
@@ -198,13 +208,44 @@ export default function ChatWindow({
 
     wsRef.current.sendMessage(
       userMsg,
-      currentSession?.id,
+      overrideSessionId ?? currentSession?.id,
       provider,
       model,
       history,
       'manual',
       activeProductId,
     );
+  };
+
+  const handleSend = (e) => {
+    e.preventDefault();
+    sendText(input);
+  };
+
+  const handleSuggestionClick = async (text) => {
+    if (isStreaming || !wsRef.current?.isConnected) return;
+    if (currentSession?.id) {
+      sendText(text);
+      return;
+    }
+    if (!onNewSession) return;
+    const newSession = await onNewSession();
+    if (newSession?.id) sendText(text, newSession.id);
+  };
+
+  const popApprovalQueue = () => {
+    setApprovalQueue((prev) => {
+      const next = prev.slice(1);
+      if (next.length > 0) {
+        setApprovalPath(next[0]?.path || '');
+      } else {
+        setApprovalPath('');
+        setBatchSaveAll(false);
+        savedDirHandleRef.current = null;
+      }
+      return next;
+    });
+    setApprovalError('');
   };
 
   const handleReject = () => {
@@ -216,10 +257,20 @@ export default function ChatWindow({
       activeProductId,
       '',
     );
-    setIsStreaming(true);
-    setPendingApproval(null);
-    setApprovalPath('');
-    setApprovalError('');
+    popApprovalQueue();
+  };
+
+  const writeToDir = async (dirHandle, filePath, content) => {
+    const parts = filePath.split('/').filter(Boolean);
+    const filename = parts.pop();
+    let target = dirHandle;
+    for (const sub of parts) {
+      target = await target.getDirectoryHandle(sub, { create: true });
+    }
+    const fileHandle = await target.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
   };
 
   const handlePickAndSave = async () => {
@@ -236,18 +287,12 @@ export default function ChatWindow({
     setApprovalError('');
     setIsSaving(true);
     try {
-      const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      const parts = approvalPath.split('/').filter(Boolean);
-      const filename = parts.pop();
-      let target = dirHandle;
-      for (const sub of parts) {
-        target = await target.getDirectoryHandle(sub, { create: true });
+      let dirHandle = savedDirHandleRef.current;
+      if (!dirHandle) {
+        dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        savedDirHandleRef.current = dirHandle;
       }
-      const fileHandle = await target.getFileHandle(filename, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(pendingApproval.content);
-      await writable.close();
-
+      await writeToDir(dirHandle, approvalPath, pendingApproval.content);
       wsRef.current.sendApproval(
         approvalPath,
         true,
@@ -255,9 +300,7 @@ export default function ChatWindow({
         activeProductId,
         dirHandle.name,
       );
-      setIsStreaming(true);
-      setPendingApproval(null);
-      setApprovalPath('');
+      popApprovalQueue();
     } catch (err) {
       if (err.name !== 'AbortError') {
         setApprovalError(`Kaydedilemedi: ${err.message}`);
@@ -265,6 +308,80 @@ export default function ChatWindow({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSaveAll = async () => {
+    if (!pendingApproval || !wsRef.current?.isConnected) return;
+    if (!window.showDirectoryPicker) {
+      setApprovalError('Bu tarayıcı klasör seçmeyi desteklemiyor. Chrome veya Edge kullanın.');
+      return;
+    }
+
+    setApprovalError('');
+    setIsSaving(true);
+    setBatchSaveAll(true);
+    try {
+      let dirHandle = savedDirHandleRef.current;
+      if (!dirHandle) {
+        dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        savedDirHandleRef.current = dirHandle;
+      }
+      // Mevcut + kuyruktaki tüm dosyaları aynı klasöre sıralı kaydet
+      const queueSnapshot = [...approvalQueue];
+      for (const item of queueSnapshot) {
+        const filePath = (item.path || '').trim() || 'dosya.txt';
+        try {
+          await writeToDir(dirHandle, filePath, item.content || '');
+          wsRef.current.sendApproval(
+            filePath,
+            true,
+            currentSession?.id,
+            activeProductId,
+            dirHandle.name,
+          );
+        } catch (err) {
+          wsRef.current.sendApproval(
+            filePath,
+            false,
+            currentSession?.id,
+            activeProductId,
+            '',
+          );
+          throw err;
+        }
+      }
+      // Queue'yu temizle
+      setApprovalQueue([]);
+      setApprovalPath('');
+      setBatchSaveAll(false);
+      savedDirHandleRef.current = null;
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        setApprovalError(`Kaydedilemedi: ${err.message}`);
+      }
+      setBatchSaveAll(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRejectAll = () => {
+    if (!wsRef.current?.isConnected) return;
+    const queueSnapshot = [...approvalQueue];
+    for (const item of queueSnapshot) {
+      wsRef.current.sendApproval(
+        item.path || '',
+        false,
+        currentSession?.id,
+        activeProductId,
+        '',
+      );
+    }
+    setApprovalQueue([]);
+    setApprovalPath('');
+    setApprovalError('');
+    setBatchSaveAll(false);
+    savedDirHandleRef.current = null;
   };
 
   const handleKeyDown = (e) => {
@@ -284,16 +401,16 @@ export default function ChatWindow({
         <p className="welcome-subtitle">Kişisel yapay zeka portalınız. Yeni bir ürün yaratmak veya soru sormak için yazmaya başlayın.</p>
 
         <div className="welcome-suggestions">
-          <button className="welcome-suggestion" onClick={() => setInput('Bana BSC Forge hakkında bilgi ver.')}>
+          <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Bana BSC Forge hakkında bilgi ver.')}>
             Bana BSC Forge hakkında bilgi ver
           </button>
-          <button className="welcome-suggestion" onClick={() => setInput('Yeni bir "İngilizce Öğretmeni" ajanı oluştur.')}>
+          <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Yeni bir "İngilizce Öğretmeni" ajanı oluştur.')}>
             Yeni bir "İngilizce Öğretmeni" ajanı oluştur
           </button>
-          <button className="welcome-suggestion" onClick={() => setInput('Python ile basit bir API nasıl yazarım?')}>
+          <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Python ile basit bir API nasıl yazarım?')}>
             Python ile basit bir API nasıl yazarım?
           </button>
-          <button className="welcome-suggestion" onClick={() => setInput('Bilgisayarımın donanım özelliklerine göre hangi yerel modelleri çalıştırabilirim?')}>
+          <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Bilgisayarımın donanım özelliklerine göre hangi yerel modelleri çalıştırabilirim?')}>
             Hangi yerel modelleri çalıştırabilirim?
           </button>
         </div>
@@ -347,10 +464,36 @@ export default function ChatWindow({
               <div className="approval-header">
                 <span className="approval-icon">📥</span>
                 <div className="approval-header-text">
-                  <div className="approval-title">Dosya Kaydetme Onayı</div>
-                  <div className="approval-path-hint">Klasör seçeceksiniz; dosya bilgisayarınıza kaydedilir.</div>
+                  <div className="approval-title">
+                    Dosya Kaydetme Onayı
+                    {approvalQueue.length > 1 && (
+                      <span className="approval-batch-badge">
+                        1 / {approvalQueue.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="approval-path-hint">
+                    {approvalQueue.length > 1
+                      ? `${approvalQueue.length} dosya sırada. "Tümünü Kabul Et" ile hepsini aynı klasöre kaydedebilirsin.`
+                      : (savedDirHandleRef.current
+                          ? `"${savedDirHandleRef.current.name}" klasörüne kaydedilecek.`
+                          : 'Klasör seçeceksiniz; dosya bilgisayarınıza kaydedilir.')}
+                  </div>
                 </div>
               </div>
+              {approvalQueue.length > 1 && (
+                <div className="approval-batch-list">
+                  {approvalQueue.map((item, idx) => (
+                    <span
+                      key={`${item.path}-${idx}`}
+                      className={`approval-batch-chip ${idx === 0 ? 'current' : ''}`}
+                      title={item.path}
+                    >
+                      {idx === 0 ? '▶ ' : ''}{(item.path || '').split('/').pop()}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="approval-path-row">
                 <label className="approval-path-label">Dosya adı</label>
                 <input
@@ -369,11 +512,34 @@ export default function ChatWindow({
                   onClick={handlePickAndSave}
                   disabled={!approvalPath.trim() || isSaving}
                 >
-                  <FolderOpen size={15} /> {isSaving ? 'Kaydediliyor…' : 'Klasör Seç ve Kaydet'}
+                  <FolderOpen size={15} />
+                  {isSaving && !batchSaveAll
+                    ? 'Kaydediliyor…'
+                    : (savedDirHandleRef.current ? 'Bu Dosyayı Kaydet' : 'Klasör Seç ve Kaydet')}
                 </button>
+                {approvalQueue.length > 1 && (
+                  <button
+                    className="approval-btn-accept-all"
+                    onClick={handleSaveAll}
+                    disabled={isSaving}
+                    title="Kalan tüm dosyaları aynı klasöre kaydet"
+                  >
+                    {batchSaveAll ? 'Tümü kaydediliyor…' : `Tümünü Kabul Et (${approvalQueue.length})`}
+                  </button>
+                )}
                 <button className="approval-btn-reject" onClick={handleReject} disabled={isSaving}>
                   <FileX size={15} /> Reddet
                 </button>
+                {approvalQueue.length > 1 && (
+                  <button
+                    className="approval-btn-reject"
+                    onClick={handleRejectAll}
+                    disabled={isSaving}
+                    title="Tüm kuyruğu reddet"
+                  >
+                    Tümünü Reddet
+                  </button>
+                )}
               </div>
             </div>
           )}

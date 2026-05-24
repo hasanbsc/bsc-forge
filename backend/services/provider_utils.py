@@ -5,7 +5,7 @@ from config import settings
 
 GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile"
 OLLAMA_FALLBACK_MODEL = "qwen2.5-coder:1.5b"
-DEEPSEEK_FALLBACK_MODEL = "deepseek-1.0"
+DEEPSEEK_FALLBACK_MODEL = "deepseek-chat"
 
 # Kota/limit dolunca denenecek sıra
 FALLBACK_CHAIN = ("gemini", "groq", "deepseek", "ollama")
@@ -35,16 +35,19 @@ def model_active_event(
 
 
 def is_quota_or_rate_limit(exc: BaseException | str) -> bool:
-    """Bulut API kota veya rate limit hatası mı?"""
+    """Bulut API kota / rate limit / bakiye hatası mı?"""
     text = str(exc).lower()
     markers = (
         "429",
+        "402",  # DeepSeek "Insufficient Balance"
         "resource_exhausted",
         "quota",
         "rate limit",
         "rate_limit",
         "too many requests",
         "exceeded your current quota",
+        "insufficient balance",
+        "insufficient_balance",
         "capacity",  # Groq bazen capacity döner
     )
     return any(m in text for m in markers)
@@ -58,8 +61,16 @@ def is_fallbackable_error(exc: BaseException | str) -> bool:
     # Geçici sunucu hataları
     if any(x in text for x in ("503", "502", "504", "unavailable", "overloaded")):
         return True
-    # Groq/Llama bazen tool çağrısı formatını bozar (400 tool_use_failed) — fallback'le
-    return "tool_use_failed" in text or "failed to call a function" in text
+    # Tool/function call sorunları (Groq Llama, Gemini MALFORMED_FUNCTION_CALL)
+    tool_markers = (
+        "tool_use_failed",
+        "failed to call a function",
+        "malformed_function_call",
+        "malformed function call",
+        "max_tokens",
+        "fallback gerek",
+    )
+    return any(m in text for m in tool_markers)
 
 
 def is_auth_error(exc: BaseException | str) -> bool:
@@ -72,9 +83,9 @@ def is_error_token(token: str) -> bool:
 
 
 def fallback_notice(from_provider: str, to_provider: str) -> str:
-    """UI'da gösterilecek geçiş mesajı."""
+    """UI'da gösterilecek geçiş mesajı (kota/limit veya tool format sorunu)."""
     return (
-        f"⚠️ **{PROVIDER_LABELS.get(from_provider, from_provider)}** kotası/limiti doldu; "
+        f"⚠️ **{PROVIDER_LABELS.get(from_provider, from_provider)}** yanıt veremedi; "
         f"**{PROVIDER_LABELS.get(to_provider, to_provider)}** ile devam ediliyor."
     )
 
@@ -92,6 +103,8 @@ def cascade_from(start: str) -> list[str]:
             chain.append("gemini")
         elif p == "groq" and settings.is_groq_configured():
             chain.append("groq")
+        elif p == "deepseek" and settings.is_deepseek_configured():
+            chain.append("deepseek")
         elif p == "ollama":
             chain.append("ollama")
     return chain or ["ollama"]

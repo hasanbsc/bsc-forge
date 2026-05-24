@@ -36,6 +36,7 @@ class ModelEntry:
 
 
 # ─── Bulut modelleri (API key) ─────────────────────────────
+# priority: düşük sayı = önce tercih edilir (aynı görev içinde sıralama)
 CLOUD_MODELS: list[ModelEntry] = [
     ModelEntry(
         id="gemini-flash",
@@ -47,7 +48,40 @@ CLOUD_MODELS: list[ModelEntry] = [
             TASK_TURKISH, TASK_ENGLISH, TASK_FAST, TASK_REASONING, TASK_WEATHER,
             TASK_CODING, TASK_FILE_OPS,
         }),
-        priority=10,
+        # Tool calling'de en güvenilir + free tier 1500 RPD — kodlamada da öne al
+        priority=4,
+    ),
+    ModelEntry(
+        id="deepseek-coder",
+        provider="deepseek",
+        model="deepseek-coder",
+        label="DeepSeek Coder",
+        type="cloud",
+        tasks=frozenset({TASK_CODING, TASK_FILE_OPS}),
+        # DeepSeek ücretli (free tier yok). Otomatik routing'in tercih
+        # etmemesi için priority yüksek; manuel seçim için katalogda kalır.
+        priority=90,
+    ),
+    ModelEntry(
+        id="gemini-pro",
+        provider="gemini",
+        model="gemini-2.5-pro",
+        label="Gemini 2.5 Pro",
+        type="cloud",
+        tasks=frozenset({
+            TASK_CODING, TASK_REASONING, TASK_FILE_OPS,
+        }),
+        # Free tier'de çok kısıtlı (5 RPM, ~50 RPD) — yalnızca manuel seçimle gelsin
+        priority=80,
+    ),
+    ModelEntry(
+        id="deepseek-chat",
+        provider="deepseek",
+        model="deepseek-chat",
+        label="DeepSeek Chat",
+        type="cloud",
+        tasks=frozenset({TASK_TURKISH, TASK_ENGLISH, TASK_FAST, TASK_REASONING}),
+        priority=90,  # Ücretli — yalnızca manuel seçim için
     ),
     ModelEntry(
         id="groq-70b",
@@ -56,6 +90,8 @@ CLOUD_MODELS: list[ModelEntry] = [
         label="Llama 3.3 70B (Groq)",
         type="cloud",
         tasks=frozenset({TASK_CODING, TASK_ENGLISH, TASK_REASONING, TASK_TURKISH}),
+        # Tool calling güvenilirliği Gemini'den düşük (function tag'leri metne
+        # yazabiliyor) — Gemini Flash kotaya takılırsa fallback olarak kalsın
         priority=20,
     ),
     ModelEntry(
@@ -67,27 +103,58 @@ CLOUD_MODELS: list[ModelEntry] = [
         tasks=frozenset({TASK_FAST, TASK_ENGLISH}),
         priority=5,
     ),
-    ModelEntry(
-        id="deepseek-1",
-        provider="deepseek",
-        model="deepseek-1.0",
-        label="Deepseek 1.0",
-        type="cloud",
-        tasks=frozenset({TASK_TURKISH, TASK_ENGLISH, TASK_FAST, TASK_REASONING}),
-        priority=30,
-    ),
 ]
 
 # ─── Yerel Ollama şablonları (yüklü modellere göre eşleşir) ───
 OLLAMA_TEMPLATES: list[ModelEntry] = [
     ModelEntry(
+        id="ollama-deepseek-coder-v2",
+        provider="ollama",
+        model="deepseek-coder-v2:16b",
+        label="DeepSeek Coder V2 16B (Yerel)",
+        type="local",
+        tasks=frozenset({TASK_CODING, TASK_FILE_OPS, TASK_REASONING}),
+        priority=5,
+        ollama_name="deepseek-coder-v2",
+    ),
+    ModelEntry(
+        id="ollama-qwen-coder-14b",
+        provider="ollama",
+        model="qwen2.5-coder:14b",
+        label="Qwen 2.5 Coder 14B (Yerel)",
+        type="local",
+        tasks=frozenset({TASK_CODING, TASK_FILE_OPS, TASK_REASONING}),
+        priority=6,
+        ollama_name="qwen2.5-coder:14b",
+    ),
+    ModelEntry(
+        id="ollama-qwen-coder-7b",
+        provider="ollama",
+        model="qwen2.5-coder:7b",
+        label="Qwen 2.5 Coder 7B (Yerel)",
+        type="local",
+        tasks=frozenset({TASK_CODING, TASK_FILE_OPS}),
+        priority=8,
+        ollama_name="qwen2.5-coder:7b",
+    ),
+    ModelEntry(
+        id="ollama-codestral",
+        provider="ollama",
+        model="codestral:22b",
+        label="Codestral 22B (Yerel)",
+        type="local",
+        tasks=frozenset({TASK_CODING, TASK_FILE_OPS}),
+        priority=7,
+        ollama_name="codestral",
+    ),
+    ModelEntry(
         id="ollama-qwen-coder",
         provider="ollama",
         model="qwen2.5-coder:1.5b",
-        label="Qwen 2.5 Coder (Yerel)",
+        label="Qwen 2.5 Coder 1.5B (Yerel)",
         type="local",
         tasks=frozenset({TASK_CODING, TASK_FILE_OPS}),
-        priority=10,
+        priority=12,
         ollama_name="qwen2.5-coder",
     ),
     ModelEntry(
