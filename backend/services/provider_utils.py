@@ -111,13 +111,34 @@ def cascade_from(start: str) -> list[str]:
 
 
 def model_for_provider(provider: str, preferred: str | None = None) -> str:
+    """Provider'a uygun model adını döndür.
+
+    `preferred` farklı bir provider'a aitse (ör. cascade'de Gemini'den Ollama'ya
+    geçince `gemini-2.5-flash` korunmuşsa) yok say ve provider'ın varsayılan
+    fallback modelini kullan.
+    """
+    pref = (preferred or "").lower()
     if provider == "gemini":
-        return preferred or "gemini-2.5-flash"
+        if pref.startswith("gemini"):
+            return preferred
+        return "gemini-2.5-flash"
     if provider == "groq":
-        return preferred if preferred and "llama" in preferred else GROQ_FALLBACK_MODEL
+        # Groq'ta Llama ailesi + diğer Groq isimleri (mixtral, gemma, qwen ...)
+        if pref and (
+            "llama" in pref
+            or pref.startswith(("mixtral", "gemma", "qwen", "deepseek-r1"))
+        ):
+            return preferred
+        return GROQ_FALLBACK_MODEL
     if provider == "deepseek":
-        return preferred or DEEPSEEK_FALLBACK_MODEL
-    return preferred or OLLAMA_FALLBACK_MODEL
+        if pref.startswith("deepseek"):
+            return preferred
+        return DEEPSEEK_FALLBACK_MODEL
+    # ollama — yerel modeller "name:tag" formatında (örn. qwen2.5-coder:1.5b);
+    # bulut model adları (gemini-..., deepseek-...) tag içermez ve geçersizdir.
+    if preferred and ":" in preferred and not pref.startswith(("gemini", "deepseek-chat", "deepseek-coder")):
+        return preferred
+    return OLLAMA_FALLBACK_MODEL
 
 
 async def is_ollama_available() -> bool:

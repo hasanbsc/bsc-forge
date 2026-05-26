@@ -88,10 +88,15 @@ def write_file(path: str, content: str) -> str:
         return f"[HATA] İçerik çok büyük (max {MAX_WRITE_BYTES // 1000} KB)."
 
     action = "güncellendi" if target.exists() else "oluşturuldu"
+    workspace = _workspace()
     target.parent.mkdir(parents=True, exist_ok=True)
+    # TOCTOU: parent oluştuktan sonra hedefin hâlâ workspace içinde olduğunu doğrula
+    # (örn. parent yolundaki bir bileşen symlink ile değiştirilmiş olabilir).
+    if not target.resolve().is_relative_to(workspace):
+        return "[HATA] Hedef yol workspace dışına çıkıyor."
     try:
         target.write_text(content, encoding="utf-8")
-        rel = target.relative_to(_workspace())
+        rel = target.relative_to(workspace)
         return f"✅ `{rel}` {action} ({len(content)} karakter)"
     except Exception as e:
         return f"[HATA] Yazılamadı: {e}"

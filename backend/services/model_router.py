@@ -19,6 +19,7 @@ from services.model_registry import (
     match_ollama_installed,
 )
 from services.provider_utils import is_ollama_available
+from services.orchestrator import orchestrator
 
 # ─── Sınıflandırma sinyalleri ─────────────────────────────
 
@@ -76,6 +77,10 @@ class RouteDecision:
     label: str
     reason: str
     entry_id: str
+    # Yeni: orkestrasyon katmanı kararı
+    layer: str = "analysis"  # "production" (uzun üretim, yerel tercih) | "analysis" (bulut tercih)
+    complexity: str = "medium"  # "simple" | "medium" | "complex"
+    source: str = "heuristic"  # "heuristic" | "orchestrator" (Mistral 7B fallback)
 
     def to_dict(self) -> dict:
         return {
@@ -86,19 +91,128 @@ class RouteDecision:
             "label": self.label,
             "reason": self.reason,
             "entry_id": self.entry_id,
+            "layer": self.layer,
+            "complexity": self.complexity,
+            "source": self.source,
         }
 
 
+# ─── Katman (layer) heuristiği — sıfır gecikme ön karar ─────
+
+# Uzun çıktı isteyen üretim niyetleri → yerel tercih edilir (kota tasarrufu + kalite)
+_PRODUCTION_SIGNALS_STRICT = (
+    # Site / web üretimi
+    "site yap", "site oluştur", "website", "web sitesi", "landing page",
+    "homepage", "ana sayfa", "tek sayfa",
+    # HTML/CSS/JS açık ifade
+    "html dosya", "html sayfa", "html üret", "html oluştur",
+    "css dosya", "stylesheet",
+    "üç ayrı dosya", "birden fazla dosya", "modüler dosya",
+    "ayrı dosya", "ayrı bir dosya",
+    # Codex tarzı tetikleyiciler
+    "index.html", "style.css", "script.js",
+)
+_PRODUCTION_KEYWORDS = (
+    "site", "sayfa", "html", "css", "javascript", "landing", "anasayfa",
+    "menü", "navbar", "hero", "footer", "frontend", "template",
+)
+_PRODUCTION_VERBS = (
+    "oluştur", "yap", "üret", "yaz", "tasarla", "kodla", "geliştir",
+    "build", "create", "generate", "make", "design",
+)
+
+_ANALYSIS_SIGNALS = (
+    # Türkçe
+    "karşılaştır", "nedir", "ne demek", "ne anlama",
+    "neden", "niçin", "açıkla", "anlat", "öner",
+    "fark nedir", "fark var", "ne fark",
+    # İngilizce
+    "compare", "explain", "what is", "what does", "why", "difference between",
+)
+
+
+def detect_layer(message: str, history: list[dict] | None = None) -> tuple[str, str]:
+    """
+    Mesajı 'production' (üretim) veya 'analysis' (analiz) katmanına yerleştirir.
+
+    Karmaşıklık: simple (< 8 kelime, soru), medium (varsayılan), complex (> 30 kelime).
+    Belirsiz mesajlar için history bağlamına bakılır — son asistan mesajında
+    bir dosya yazılmışsa devam mesajı muhtemelen üretim devamıdır.
+    """
+    text = message.lower().strip()
+    word_count = len(message.split())
+
+    # Karmaşıklık tahmini
+    if word_count < 8:
+        complexity = "simple"
+    elif word_count > 30:
+        complexity = "complex"
+    else:
+        complexity = "medium"
+
+    # 1) Strict üretim ifadeleri (kesin işaret)
+    if any(s in text for s in _PRODUCTION_SIGNALS_STRICT):
+        return "production", complexity
+
+    # 2) Üretim fiili + üretim anahtar kelimesi birlikte
+    has_verb = any(v in text for v in _PRODUCTION_VERBS)
+    has_keyword = any(k in text for k in _PRODUCTION_KEYWORDS)
+    if has_verb and has_keyword:
+        return "production", complexity
+
+    # 3) Açık analiz sinyali
+    if any(s in text for s in _ANALYSIS_SIGNALS):
+        return "analysis", complexity
+
+    # 4) Belirsiz kısa devam mesajı + history'de son asistan mesajı dosya
+    #    yazımı içeriyor → devam = üretim
+    if word_count < 8 and history:
+        for msg in reversed(history):
+            if msg.get("role") != "assistant":
+                continue
+            content = (msg.get("content") or "").lower()
+            if (
+                "kaydedildi" in content
+                or "oluşturuldu" in content
+                or "güncellendi" in content
+                or ".html" in content
+                or ".css" in content
+                or ".js" in content
+            ):
+                return "production", complexity
+            break
+
+    return "analysis", complexity
+
+
 _TR_STOPWORDS = {
-    "ve", "veya", "ile", "bir", "bu", "şu", "için", "ben", "sen", "biz", "siz",
-    "bana", "sana", "bize", "size", "ona", "onlara", "ne", "nasıl", "neden",
-    "kim", "nerede", "nereye", "ama", "fakat", "çünkü", "gibi", "kadar", "ise",
-    "değil", "yok", "var", "olarak", "hakkında", "üzerine", "sonra", "önce",
-    "bilgi", "yap", "yaz", "ver", "söyle", "açıkla", "anlat", "göster",
+    # Bağlaç / edat
+    "ve", "veya", "ile", "ama", "fakat", "çünkü", "gibi", "kadar", "ise",
+    "olarak", "hakkında", "üzerine", "sonra", "önce", "ki", "de", "da",
+    # Zamir / işaret
+    "bir", "bu", "şu", "o", "ben", "sen", "biz", "siz", "onlar",
+    "bana", "sana", "bize", "size", "ona", "onlara", "bunu", "şunu", "onu",
+    "buna", "şuna", "bunlar", "şunlar", "kendi", "kendin", "kendisi",
+    # Soru / belirteç
+    "ne", "nasıl", "neden", "kim", "nerede", "nereye", "hangi", "kaç", "niye",
+    # Yaygın fiiller / fiil çekimleri (düzenleme bağlamı için kritik)
+    "yap", "yaz", "ver", "söyle", "açıkla", "anlat", "göster", "et", "ol",
+    "yapma", "yapar", "yaparsın", "yaparım", "yapalım", "yaptın", "yaptım",
+    "değiştir", "düzelt", "güncelle", "yenile", "ekle", "çıkar", "kaldır",
+    "iyileştir", "geliştir", "getir", "getirir", "getirin", "ediyor", "edilen",
+    "olan", "olacak", "oldu", "olur", "olmuş",
+    # Sıfat / zarf
+    "daha", "iyi", "kötü", "büyük", "küçük", "az", "çok", "her", "tüm",
+    "bütün", "biraz", "şimdi", "yine", "tekrar", "yeni", "eski", "hızlı",
+    "yavaş", "hep", "bazı", "böyle", "şöyle", "öyle", "lütfen", "tamam",
+    # Olumsuzlama
+    "değil", "yok", "var", "evet", "hayır",
+    # Sık kullanılan isimler (sohbet)
+    "bilgi", "dosya", "kod", "site", "sayfa", "şey",
 }
 
 
-def _detect_language(text: str) -> str:
+def _detect_language(text: str, history: list[dict] | None = None) -> str:
     lower = text.lower()
     # Türkçe karakter veya Türkçe stopword varsa Türkçe say
     if any(c in _TURKISH_CHARS for c in text):
@@ -111,7 +225,20 @@ def _detect_language(text: str) -> str:
     )
     if re.search(en_markers, lower):
         return "en"
-    # Çoğunlukla ASCII kelime → İngilizce ihtimali
+    # Çoğunlukla ASCII kelime → İngilizce ihtimali. AMA önce sohbet bağlamına bak:
+    # "iyileştir", "değiştir", "düzelt" gibi kısa devam mesajları stopword'lerce
+    # yakalanmazsa son kullanıcı mesajındaki dile uy.
+    if history:
+        for msg in reversed(history):
+            if msg.get("role") != "user":
+                continue
+            prev = msg.get("content") or ""
+            if any(c in _TURKISH_CHARS for c in prev):
+                return "tr"
+            prev_tokens = re.findall(r"[a-zA-ZğıüşöçİĞÜŞÖÇ']+", prev.lower())
+            if any(tok in _TR_STOPWORDS for tok in prev_tokens):
+                return "tr"
+            break  # yalnızca en son user mesajına bak
     if len(tokens) >= 3 and sum(1 for w in tokens if w.isascii()) / len(tokens) > 0.85:
         return "en"
     return "tr"
@@ -120,7 +247,7 @@ def _detect_language(text: str) -> str:
 def classify_task(message: str, history: list[dict] | None = None) -> str:
     """Kural tabanlı görev sınıflandırıcı (API maliyeti: 0)."""
     text = message.lower().strip()
-    lang = _detect_language(message)
+    lang = _detect_language(message, history)
 
     if any(s in text for s in _FILE_SIGNALS):
         return TASK_FILE_OPS
@@ -203,8 +330,14 @@ class ModelRouter:
         model: str | None = None,
         routing: str = "manual",
         history: list[dict] | None = None,
+        use_orchestrator: bool = False,
     ) -> RouteDecision:
-        """Manuel veya otomatik model seçimi."""
+        """Manuel veya otomatik model seçimi.
+
+        `use_orchestrator=True` ise heuristik karar verildikten sonra yerel
+        Mistral 7B'ye danışılır; çelişki varsa orchestrator kararı override eder.
+        Maliyet: 2-15 sn (Mistral cold start). Default kapalı — UI'dan opt-in.
+        """
         if not self._catalog:
             await self.refresh_catalog()
 
@@ -219,6 +352,9 @@ class ModelRouter:
                         label=e.label,
                         reason="Kullanıcı seçimi",
                         entry_id=e.id,
+                        layer="analysis",
+                        complexity="medium",
+                        source="manual",
                     )
             return RouteDecision(
                 task="manual",
@@ -227,34 +363,26 @@ class ModelRouter:
                 label=f"{provider}/{model}",
                 reason="Kullanıcı seçimi (katalog dışı)",
                 entry_id="manual",
+                layer="analysis",
+                complexity="medium",
+                source="manual",
             )
 
         task = classify_task(message, history)
+        layer, complexity = detect_layer(message, history)
 
-        # Yaratma/üretme niyeti — bulut tercih edilir
-        _creation_signals = (
-            "oluştur", "yaz", "yap", "üret", "oluşturun", "kodla", "tasarla",
-            "create", "build", "generate", "make", "implement", "write",
-        )
-        # Düzenleme niyeti — uzun düzenleme bulut, kısa+net düzenleme yerel olabilir
-        _edit_signals = (
-            "düzenle", "değiştir", "değişiklik", "düzelt", "güncelle", "yenile",
-            "ekle", "çıkar", "kaldır", "geliştir", "iyileştir",
-            "refactor", "rename", "fix", "edit", "modify", "update", "patch",
-        )
-        msg_lower = message.lower()
-        is_creation = any(s in msg_lower for s in _creation_signals)
-        is_edit = any(s in msg_lower for s in _edit_signals)
-        word_count = len(message.split())
+        # Layer "production" tespit edildi ama task sohbet/genel kaldıysa
+        # (örn. "site yap" → CODE_SIGNALS'a düşmedi) → kod görevine yükselt.
+        # Böylece üretim isteği kod modeline (Qwen Coder vb.) yönelir.
+        if layer == "production" and task in (TASK_TURKISH, TASK_ENGLISH, TASK_FAST):
+            task = TASK_CODING
 
-        # Dosya işlemleri her zaman yerel.
-        # Kodlamada **varsayılan bulut**. Yerel yalnızca: belirgin küçük
-        # düzenleme + yaratma niyeti yok + kısa istek (< 15 kelime).
-        prefer_local = task == TASK_FILE_OPS or (
-            task == TASK_CODING
-            and is_edit
-            and not is_creation
-            and word_count < 15
+        # Üretim katmanı → yerel modelleri tercih (kota dostu, kalite)
+        # Analiz katmanı → bulut modelleri tercih (hızlı, ucuz)
+        # Dosya işlemleri her zaman yerel; weather/turkish/english analiz.
+        prefer_local = (
+            task == TASK_FILE_OPS
+            or layer == "production"
         )
 
         entry = self.pick_for_task(task, prefer_local=prefer_local)
@@ -266,9 +394,34 @@ class ModelRouter:
                 label="Varsayılan",
                 reason="Katalog boş; varsayılan model",
                 entry_id="default",
+                layer=layer,
+                complexity=complexity,
+                source="heuristic",
             )
 
-        reason = f"Görev: {TASK_LABELS_TR.get(task, task)} → {entry.label}"
+        # Opsiyonel: yerel orchestrator (Mistral 7B) ile ikincil görüş
+        # Yalnızca user opt-in ettiyse — 2-15 sn gecikme maliyeti var.
+        source = "heuristic"
+        if use_orchestrator:
+            decision = await orchestrator.analyze(message)
+            if decision is not None:
+                # Orchestrator çelişkisi varsa override et
+                if decision.layer != layer:
+                    layer = decision.layer
+                    prefer_local = (
+                        task == TASK_FILE_OPS
+                        or layer == "production"
+                    )
+                    entry = self.pick_for_task(task, prefer_local=prefer_local) or entry
+                complexity = decision.complexity
+                source = "orchestrator"
+
+        layer_tr = "Üretim (yerel tercih)" if layer == "production" else "Analiz (bulut)"
+        prefix = "🎼 " if source == "orchestrator" else ""
+        reason = (
+            f"{prefix}Görev: {TASK_LABELS_TR.get(task, task)} · "
+            f"Katman: {layer_tr} → {entry.label}"
+        )
         if task == TASK_WEATHER:
             reason += " (canlı hava verisi için ileride weather aracı gerekir)"
 
@@ -279,6 +432,9 @@ class ModelRouter:
             label=entry.label,
             reason=reason,
             entry_id=entry.id,
+            layer=layer,
+            complexity=complexity,
+            source=source,
         )
 
 
