@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, User, Flame, Wrench, Cloud, Cpu, Sparkles, FolderOpen, FileX, ArrowUp, ArrowDown } from 'lucide-react';
+import { Send, User, Flame, Wrench, Cloud, Cpu, Sparkles, FolderOpen, FileX, ArrowUp, ArrowDown, Music } from 'lucide-react';
 import { ChatWebSocket } from '../services/websocket';
 
 const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -43,6 +43,7 @@ export default function ChatWindow({
   activeProductId = 'forge',
   onNewSession,
   onFileTouched,
+  authVersion = 0,
 }) {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -53,6 +54,7 @@ export default function ChatWindow({
   const [approvalError, setApprovalError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [batchSaveAll, setBatchSaveAll] = useState(false); // "Tümünü kabul et" modu
+  const [orchestrate, setOrchestrate] = useState(false); // Orkestra şefi (yerel Mistral 7B ön-analiz)
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const streamIndexRef = useRef(null);
@@ -190,7 +192,7 @@ export default function ChatWindow({
       ws.disconnect();
       wsRef.current = null;
     };
-  }, []);
+  }, [authVersion]);
 
   const sendText = (text, overrideSessionId) => {
     const userMsg = (text || '').trim();
@@ -214,6 +216,7 @@ export default function ChatWindow({
       history,
       'manual',
       activeProductId,
+      orchestrate,
     );
   };
 
@@ -269,7 +272,10 @@ export default function ChatWindow({
     }
     const fileHandle = await target.getFileHandle(filename, { create: true });
     const writable = await fileHandle.createWritable();
-    await writable.write(content);
+    // UTF-8 zorla: ham string yazımı Türkçe karakterleri bozar (Kahve DÃ¼kkanÄ±).
+    // Blob veya Uint8Array tarayıcıya kesin UTF-8 byte'larını verir.
+    const utf8Bytes = new TextEncoder().encode(content);
+    await writable.write(utf8Bytes);
     await writable.close();
   };
 
@@ -568,6 +574,19 @@ export default function ChatWindow({
               rows={1}
               disabled={isStreaming}
             />
+            <button
+              type="button"
+              className={`chat-orchestrate-btn ${orchestrate ? 'active' : ''}`}
+              onClick={() => setOrchestrate((v) => !v)}
+              title={
+                orchestrate
+                  ? 'Orkestra şefi açık — yerel Mistral 7B ile ön analiz (2-15s gecikme)'
+                  : 'Orkestra şefi kapalı — sadece hızlı heuristik (sıfır gecikme)'
+              }
+              disabled={isStreaming}
+            >
+              <Music size={16} />
+            </button>
             <button
               type="submit"
               className="chat-send-btn"

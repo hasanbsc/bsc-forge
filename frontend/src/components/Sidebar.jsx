@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, MessageSquare, Flame, Trash2, LayoutGrid } from 'lucide-react';
+import { Plus, MessageSquare, Flame, Trash2, LayoutGrid, LogIn, LogOut } from 'lucide-react';
 
 export default function Sidebar({
   sessions,
@@ -11,7 +11,11 @@ export default function Sidebar({
   onDeleteSession,
   view,
   onViewChange,
+  user,
+  onLoginClick,
+  onLogout,
 }) {
+  const userInitial = user?.email ? user.email[0].toUpperCase() : '?';
   return (
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
@@ -76,6 +80,28 @@ export default function Sidebar({
       )}
 
       <div className="sidebar-footer">
+        {user ? (
+          <div className="sidebar-user">
+            <div className="sidebar-user-avatar">{userInitial}</div>
+            <div className="sidebar-user-info">
+              <div className="sidebar-user-email" title={user.email}>{user.email}</div>
+              <div className="sidebar-user-label">Üye</div>
+            </div>
+            <button
+              type="button"
+              className="sidebar-user-action"
+              onClick={onLogout}
+              title="Çıkış yap"
+              aria-label="Çıkış yap"
+            >
+              <LogOut size={15} />
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="sidebar-login-btn" onClick={onLoginClick}>
+            <LogIn size={15} /> Giriş Yap / Kayıt Ol
+          </button>
+        )}
         <div className="session-item" style={{ marginBottom: 0 }}>
           <Flame size={16} className="session-item-icon" color="var(--accent-amber)" />
           <div className="session-item-text" style={{ color: 'var(--text-secondary)' }}>Ajan Ayarları</div>

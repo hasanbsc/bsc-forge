@@ -4,8 +4,16 @@ import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import ModelSelector from './components/ModelSelector';
 import CodePanel from './components/CodePanel/CodePanel';
+import AuthModal from './components/AuthModal';
 import ProductsPage from './pages/ProductsPage';
 import { fetchSessions, createSession, fetchSessionMessages, fetchModels, deleteSession, fetchProducts } from './services/api';
+import {
+  fetchMe,
+  setToken,
+  clearToken,
+  claimAnonymous,
+  getBrowserId,
+} from './services/auth';
 
 const addIds = (msgs) =>
   msgs.map((m, i) => ({ id: m.created_at ? `${m.created_at}-${i}` : `loaded-${i}`, ...m }));
@@ -22,6 +30,11 @@ export default function App() {
   const [view, setView] = useState('chat'); // 'chat' | 'products'
   const [products, setProducts] = useState([]);
   const [activeProductId, setActiveProductId] = useState('forge');
+
+  // Üyelik
+  const [user, setUser] = useState(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authVersion, setAuthVersion] = useState(0); // WS'i tazelemek için
 
   // Codex tarzı kod paneli
   const [panelFiles, setPanelFiles] = useState([]);
@@ -86,15 +99,19 @@ export default function App() {
     };
   }, []);
 
-  // Başlangıçta modelleri ve sohbet geçmişini yükle
+  // Başlangıçta modelleri, sohbet geçmişini ve kullanıcıyı yükle
   useEffect(() => {
     const initData = async () => {
       try {
-        const [modelsData, sessionsData, productsData] = await Promise.all([
+        // browser_id ilk açılışta üretilsin
+        getBrowserId();
+        const [meData, modelsData, sessionsData, productsData] = await Promise.all([
+          fetchMe().catch(() => null),
           fetchModels().catch(() => ({ models: [], default: '' })),
           fetchSessions().catch(() => ({ sessions: [] })),
           fetchProducts().catch(() => ({ products: [] })),
         ]);
+        setUser(meData);
         setProducts(productsData.products || []);
         
         if (modelsData.models.length > 0) {
@@ -185,6 +202,39 @@ export default function App() {
     }
   };
 
+  const refreshSessions = async () => {
+    try {
+      const data = await fetchSessions();
+      setSessions(data.sessions || []);
+    } catch (err) {
+      console.error('Oturumlar yenilenemedi:', err);
+    }
+  };
+
+  const handleAuthSuccess = async ({ token, user: loggedUser }) => {
+    setToken(token);
+    setUser(loggedUser);
+    setAuthOpen(false);
+    setCurrentSession(null);
+    setMessages([]);
+    try {
+      await claimAnonymous(getBrowserId());
+    } catch (err) {
+      console.warn('Anonim sohbet bağlama hatası:', err);
+    }
+    await refreshSessions();
+    setAuthVersion((v) => v + 1);
+  };
+
+  const handleLogout = async () => {
+    clearToken();
+    setUser(null);
+    setCurrentSession(null);
+    setMessages([]);
+    await refreshSessions();
+    setAuthVersion((v) => v + 1);
+  };
+
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
@@ -202,6 +252,15 @@ export default function App() {
         onDeleteSession={handleDeleteSession}
         view={view}
         onViewChange={(v) => { setView(v); closeSidebar(); }}
+        user={user}
+        onLoginClick={() => setAuthOpen(true)}
+        onLogout={handleLogout}
+      />
+
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onSuccess={handleAuthSuccess}
       />
       
       <main className="main-content">
@@ -266,6 +325,7 @@ export default function App() {
               activeProductId={activeProductId}
               onNewSession={() => handleNewSession('forge')}
               onFileTouched={handleFileTouched}
+              authVersion={authVersion}
             />
           </>
         )}

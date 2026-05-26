@@ -1,3 +1,5 @@
+import { getBrowserId, getToken } from './auth';
+
 const MAX_RETRIES = 5;
 const HEARTBEAT_INTERVAL = 30_000;
 
@@ -23,8 +25,30 @@ export class ChatWebSocket {
 
   connect() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this._wsUrl = `${protocol}//${window.location.host}/api/chat/ws`;
+    const qs = new URLSearchParams();
+    const token = getToken();
+    if (token) qs.set('token', token);
+    qs.set('browser_id', getBrowserId());
+    this._wsUrl = `${protocol}//${window.location.host}/api/chat/ws?${qs.toString()}`;
     this._connect();
+  }
+
+  // Auth değişince bağlantıyı yeni kimlikle tazele
+  reconnectWithAuth() {
+    this._intentionalClose = true;
+    if (this.ws) {
+      try { this.ws.close(); } catch { /* yok say */ }
+      this.ws = null;
+    }
+    this._stopHeartbeat();
+    if (this._retryTimer) {
+      clearTimeout(this._retryTimer);
+      this._retryTimer = null;
+    }
+    this.isConnected = false;
+    this._intentionalClose = false;
+    this._retryCount = 0;
+    this.connect();
   }
 
   _connect() {
@@ -117,7 +141,7 @@ export class ChatWebSocket {
     }));
   }
 
-  sendMessage(message, sessionId, provider, model, history, routing = 'manual', productId = 'forge') {
+  sendMessage(message, sessionId, provider, model, history, routing = 'manual', productId = 'forge', orchestrate = false) {
     if (!sessionId) {
       this.onError('Aktif oturum yok. Soldaki "Yeni Sohbet" butonuna tıklayın.');
       return;
@@ -135,6 +159,7 @@ export class ChatWebSocket {
       routing: provider === 'auto' || model === 'auto' ? 'auto' : routing,
       history,
       product_id: productId,
+      orchestrate,
     }));
   }
 
