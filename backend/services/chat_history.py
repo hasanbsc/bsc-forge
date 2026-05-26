@@ -47,7 +47,7 @@ class ChatHistory:
             await db.commit()
 
     async def _migrate_sessions_user_columns(self, db: aiosqlite.Connection) -> None:
-        """Eski DB'lerde sessions tablosuna user_id ve browser_id sütunlarını ekler."""
+        """Eski DB'lerde sessions tablosuna user_id, browser_id, pinned sütunlarını ekler."""
         cursor = await db.execute("PRAGMA table_info(sessions)")
         columns = {row[1] for row in await cursor.fetchall()}
         if "user_id" not in columns:
@@ -56,6 +56,8 @@ class ChatHistory:
         if "browser_id" not in columns:
             await db.execute("ALTER TABLE sessions ADD COLUMN browser_id TEXT")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_sessions_browser_id ON sessions(browser_id)")
+        if "pinned" not in columns:
+            await db.execute("ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
 
     async def create_session(
         self,
@@ -134,7 +136,7 @@ class ChatHistory:
             clauses.append("product = ?")
             params.append(product)
 
-        sql = f"SELECT * FROM sessions WHERE {' AND '.join(clauses)} ORDER BY updated_at DESC"
+        sql = f"SELECT * FROM sessions WHERE {' AND '.join(clauses)} ORDER BY pinned DESC, updated_at DESC"
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(sql, params)
@@ -163,6 +165,14 @@ class ChatHistory:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
             await db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+            await db.commit()
+
+    async def set_pinned(self, session_id: str, pinned: bool) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE sessions SET pinned = ? WHERE id = ?",
+                (1 if pinned else 0, session_id),
+            )
             await db.commit()
 
     async def claim_anonymous_sessions(self, user_id: str, browser_id: str) -> int:

@@ -1,5 +1,20 @@
 import React from 'react';
-import { Plus, MessageSquare, Flame, Trash2, LayoutGrid, LogIn, LogOut } from 'lucide-react';
+import {
+  Plus, MessageSquare, Trash2, LayoutGrid, LogIn, LogOut,
+  Sun, Moon, MonitorSmartphone, Pin, PinOff,
+} from 'lucide-react';
+
+const THEME_NEXT_LABEL = {
+  auto: 'Açık temaya geç',
+  light: 'Koyu temaya geç',
+  dark: 'Otomatik temaya geç',
+};
+
+function ThemeIcon({ theme, size = 15 }) {
+  if (theme === 'light') return <Sun size={size} />;
+  if (theme === 'dark') return <Moon size={size} />;
+  return <MonitorSmartphone size={size} />;
+}
 
 export default function Sidebar({
   sessions,
@@ -14,8 +29,50 @@ export default function Sidebar({
   user,
   onLoginClick,
   onLogout,
+  theme = 'auto',
+  onCycleTheme,
+  onTogglePin,
 }) {
   const userInitial = user?.email ? user.email[0].toUpperCase() : '?';
+  const pinnedSessions = sessions.filter((s) => s.pinned);
+  const otherSessions = sessions.filter((s) => !s.pinned);
+
+  const renderSession = (session) => (
+    <div
+      key={session.id}
+      className={`session-item ${currentSession?.id === session.id ? 'active' : ''}`}
+      onClick={() => onSelectSession(session)}
+    >
+      <MessageSquare size={16} className="session-item-icon" />
+      <div className="session-item-text">{session.title}</div>
+      <div className="session-item-actions">
+        <button
+          type="button"
+          className="session-action-btn"
+          title={session.pinned ? 'Pinden çıkar' : 'Pinle'}
+          aria-label={session.pinned ? 'Pinden çıkar' : 'Pinle'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin?.(session);
+          }}
+        >
+          {session.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+        </button>
+        <button
+          type="button"
+          className="session-action-btn session-delete-btn"
+          title="Sohbeti sil"
+          aria-label={`${session.title} sohbetini sil`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteSession(session);
+          }}
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
   return (
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
@@ -48,29 +105,22 @@ export default function Sidebar({
 
       {view === 'chat' && (
         <div className="sidebar-sessions">
-          <div className="sidebar-section-title">Son Sohbetler</div>
-          {sessions.map(session => (
-            <div
-              key={session.id}
-              className={`session-item ${currentSession?.id === session.id ? 'active' : ''}`}
-              onClick={() => onSelectSession(session)}
-            >
-              <MessageSquare size={16} className="session-item-icon" />
-              <div className="session-item-text">{session.title}</div>
-              <button
-                type="button"
-                className="session-delete-btn"
-                title="Sohbeti sil"
-                aria-label={`${session.title} sohbetini sil`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteSession(session);
-                }}
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
+          {pinnedSessions.length > 0 && (
+            <>
+              <div className="sidebar-section-title">
+                <Pin size={11} /> Pinli
+              </div>
+              {pinnedSessions.map(renderSession)}
+            </>
+          )}
+          {otherSessions.length > 0 && (
+            <>
+              <div className="sidebar-section-title">
+                {pinnedSessions.length > 0 ? 'Diğer Sohbetler' : 'Son Sohbetler'}
+              </div>
+              {otherSessions.map(renderSession)}
+            </>
+          )}
           {sessions.length === 0 && (
             <div style={{ padding: '12px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               Henüz geçmiş sohbet yok.
@@ -102,10 +152,18 @@ export default function Sidebar({
             <LogIn size={15} /> Giriş Yap / Kayıt Ol
           </button>
         )}
-        <div className="session-item" style={{ marginBottom: 0 }}>
-          <Flame size={16} className="session-item-icon" color="var(--accent-amber)" />
-          <div className="session-item-text" style={{ color: 'var(--text-secondary)' }}>Ajan Ayarları</div>
-        </div>
+        <button
+          type="button"
+          className="sidebar-theme-btn"
+          onClick={onCycleTheme}
+          title={THEME_NEXT_LABEL[theme] || 'Tema değiştir'}
+          aria-label={THEME_NEXT_LABEL[theme] || 'Tema değiştir'}
+        >
+          <ThemeIcon theme={theme} />
+          <span>
+            Tema: {theme === 'auto' ? 'Otomatik' : theme === 'light' ? 'Açık' : 'Koyu'}
+          </span>
+        </button>
       </div>
     </div>
   );

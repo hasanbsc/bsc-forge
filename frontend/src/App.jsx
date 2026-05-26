@@ -5,8 +5,9 @@ import ChatWindow from './components/ChatWindow';
 import ModelSelector from './components/ModelSelector';
 import CodePanel from './components/CodePanel/CodePanel';
 import AuthModal from './components/AuthModal';
+import CommandPalette from './components/CommandPalette';
 import ProductsPage from './pages/ProductsPage';
-import { fetchSessions, createSession, fetchSessionMessages, fetchModels, deleteSession, fetchProducts } from './services/api';
+import { fetchSessions, createSession, fetchSessionMessages, fetchModels, deleteSession, fetchProducts, setSessionPinned } from './services/api';
 import {
   fetchMe,
   setToken,
@@ -14,6 +15,7 @@ import {
   claimAnonymous,
   getBrowserId,
 } from './services/auth';
+import { applyTheme, getStoredTheme, setStoredTheme, cycleTheme } from './services/theme';
 
 const addIds = (msgs) =>
   msgs.map((m, i) => ({ id: m.created_at ? `${m.created_at}-${i}` : `loaded-${i}`, ...m }));
@@ -35,6 +37,37 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [authVersion, setAuthVersion] = useState(0); // WS'i tazelemek için
+
+  // Command palette
+  const [cmdOpen, setCmdOpen] = useState(false);
+
+  // Cmd+K / Ctrl+K — komut paletini aç/kapat
+  useEffect(() => {
+    const onKey = (e) => {
+      const cmdK = (e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K');
+      if (cmdK) {
+        e.preventDefault();
+        setCmdOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Tema (auto | light | dark)
+  const [theme, setTheme] = useState(() => {
+    const t = getStoredTheme();
+    applyTheme(t);
+    return t;
+  });
+  const handleCycleTheme = useCallback(() => {
+    setTheme((curr) => {
+      const next = cycleTheme(curr);
+      setStoredTheme(next);
+      applyTheme(next);
+      return next;
+    });
+  }, []);
 
   // Codex tarzı kod paneli
   const [panelFiles, setPanelFiles] = useState([]);
@@ -202,6 +235,23 @@ export default function App() {
     }
   };
 
+  const handleTogglePin = async (session) => {
+    const newPinned = !session.pinned;
+    // Optimistic update
+    setSessions((prev) =>
+      [...prev]
+        .map((s) => (s.id === session.id ? { ...s, pinned: newPinned } : s))
+        .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)),
+    );
+    try {
+      await setSessionPinned(session.id, newPinned);
+    } catch (err) {
+      console.error('Pin durumu değiştirilemedi:', err);
+      // Geri al
+      setSessions((prev) => prev.map((s) => (s.id === session.id ? { ...s, pinned: !newPinned } : s)));
+    }
+  };
+
   const refreshSessions = async () => {
     try {
       const data = await fetchSessions();
@@ -255,12 +305,31 @@ export default function App() {
         user={user}
         onLoginClick={() => setAuthOpen(true)}
         onLogout={handleLogout}
+        theme={theme}
+        onCycleTheme={handleCycleTheme}
+        onTogglePin={handleTogglePin}
       />
 
       <AuthModal
         open={authOpen}
         onClose={() => setAuthOpen(false)}
         onSuccess={handleAuthSuccess}
+      />
+
+      <CommandPalette
+        open={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        sessions={sessions}
+        products={products}
+        user={user}
+        theme={theme}
+        onNewSession={() => { handleNewSession('forge'); setView('chat'); }}
+        onSelectSession={(s) => { handleSelectSession(s); setView('chat'); }}
+        onStartProduct={(p) => { handleStartProduct(p); setView('chat'); }}
+        onViewChange={setView}
+        onCycleTheme={handleCycleTheme}
+        onLoginClick={() => setAuthOpen(true)}
+        onLogout={handleLogout}
       />
       
       <main className="main-content">

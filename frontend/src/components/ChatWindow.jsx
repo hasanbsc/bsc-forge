@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, User, Flame, Wrench, Cloud, Cpu, Sparkles, FolderOpen, FileX, ArrowUp, ArrowDown, Music } from 'lucide-react';
+import { Send, User, Flame, Wrench, Cloud, Cpu, Sparkles, FolderOpen, FileX, ArrowUp, ArrowDown, Music, Search, X as XIcon, Copy, Check } from 'lucide-react';
 import { ChatWebSocket } from '../services/websocket';
 
 const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -33,6 +33,19 @@ function ModelActiveIcon({ modelType, provider }) {
   return <Cloud size={12} />;
 }
 
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function HighlightedText({ text, query }) {
+  if (!query) return text;
+  const re = new RegExp(`(${escapeRegex(query)})`, 'ig');
+  const parts = String(text).split(re);
+  return parts.map((part, i) =>
+    re.test(part) && part.toLowerCase() === query.toLowerCase()
+      ? <mark key={i} className="chat-search-mark">{part}</mark>
+      : part
+  );
+}
+
 export default function ChatWindow({
   currentSession,
   messages,
@@ -55,6 +68,10 @@ export default function ChatWindow({
   const [isSaving, setIsSaving] = useState(false);
   const [batchSaveAll, setBatchSaveAll] = useState(false); // "Tümünü kabul et" modu
   const [orchestrate, setOrchestrate] = useState(false); // Orkestra şefi (yerel Mistral 7B ön-analiz)
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [copiedMsgId, setCopiedMsgId] = useState(null);
+  const searchInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const streamIndexRef = useRef(null);
@@ -71,6 +88,44 @@ export default function ChatWindow({
   useEffect(() => {
     scrollToBottom();
   }, [messages, isStreaming]);
+
+  // Ctrl+F / Cmd+F → arama aç; Esc → kapat
+  useEffect(() => {
+    const onKey = (e) => {
+      const ctrlF = (e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F');
+      if (ctrlF) {
+        e.preventDefault();
+        setSearchOpen(true);
+        setTimeout(() => searchInputRef.current?.focus(), 0);
+      } else if (e.key === 'Escape' && searchOpen) {
+        setSearchOpen(false);
+        setSearchQuery('');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [searchOpen]);
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery('');
+  };
+
+  const handleCopy = async (msg) => {
+    try {
+      await navigator.clipboard.writeText(msg.content);
+      setCopiedMsgId(msg.id);
+      setTimeout(() => setCopiedMsgId((id) => (id === msg.id ? null : id)), 1500);
+    } catch (err) {
+      console.warn('Kopyalama başarısız:', err);
+    }
+  };
+
+  // Mesajlarda arama: query varsa içerikte (case-insensitive) eşleşenleri tut.
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredMessages = normalizedQuery
+    ? messages.filter((m) => (m.content || '').toLowerCase().includes(normalizedQuery))
+    : messages;
 
   // WebSocket kurulumu (Strict Mode çift bağlantıya karşı nesil kilidi)
   useEffect(() => {
@@ -426,9 +481,28 @@ export default function ChatWindow({
 
   return (
     <>
+      {searchOpen && (
+        <div className="chat-search-bar">
+          <Search size={14} />
+          <input
+            ref={searchInputRef}
+            type="search"
+            placeholder="Mesajlarda ara…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="chat-search-input"
+          />
+          <span className="chat-search-count">
+            {normalizedQuery ? `${filteredMessages.length} / ${messages.length}` : `${messages.length} mesaj`}
+          </span>
+          <button type="button" className="chat-search-close" onClick={closeSearch} aria-label="Aramayı kapat">
+            <XIcon size={14} />
+          </button>
+        </div>
+      )}
       <div className="chat-messages">
         <div className="chat-messages-inner">
-          {messages.map((msg) => (
+          {filteredMessages.map((msg) => (
             <div key={msg.id} className={`message ${msg.role === 'tool' ? 'message-tool-row' : ''}`}>
               <div className={`message-avatar ${msg.role}`}>
                 {msg.role === 'user' ? <User size={18} /> : msg.role === 'tool' ? <Wrench size={16} /> : <Flame size={20} />}
@@ -436,12 +510,25 @@ export default function ChatWindow({
               <div className="message-body">
                 <div className="message-role">
                   {msg.role === 'user' ? 'Sen' : msg.role === 'tool' ? 'Araç' : 'Forge Ajan'}
+                  {msg.role === 'assistant' && !msg.isStreaming && msg.content?.trim() && (
+                    <button
+                      type="button"
+                      className="message-copy-btn"
+                      title="Kopyala"
+                      onClick={() => handleCopy(msg)}
+                    >
+                      {copiedMsgId === msg.id ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedMsgId === msg.id ? 'Kopyalandı' : 'Kopyala'}
+                    </button>
+                  )}
                 </div>
                 <div className={`message-content ${msg.role === 'tool' ? 'message-tool' : ''}`}>
                   {msg.role === 'tool' ? (
-                    msg.content
+                    <HighlightedText text={msg.content} query={normalizedQuery} />
                   ) : msg.isStreaming ? (
                     <pre className="message-streaming">{msg.content}</pre>
+                  ) : normalizedQuery ? (
+                    <pre className="message-streaming"><HighlightedText text={msg.content} query={normalizedQuery} /></pre>
                   ) : (
                     <ReactMarkdown>{msg.content}</ReactMarkdown>
                   )}

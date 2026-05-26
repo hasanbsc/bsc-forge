@@ -4,26 +4,10 @@
    ═══════════════════════════════════════════════════════ */
 
 /* ─── CSS Değişkenleri ─────────────────────────────── */
+/* Varsayılan: karanlık tema. Açık tema [data-theme="light"] veya
+   prefers-color-scheme:light + [data-theme="auto"] ile uygulanır. */
 :root {
-  /* Renkler — Forge Ateşi Paleti */
-  --bg-primary: #07070f;
-  --bg-secondary: #0d0d1a;
-  --bg-tertiary: #141428;
-  --bg-elevated: #1a1a35;
-  --bg-hover: #22224a;
-
-  /* Cam efektli yüzeyler */
-  --glass-bg: rgba(20, 20, 50, 0.6);
-  --glass-border: rgba(255, 255, 255, 0.06);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-
-  /* Metin */
-  --text-primary: #eaeaf0;
-  --text-secondary: #9090b0;
-  --text-muted: #5a5a7a;
-  --text-inverse: #07070f;
-
-  /* Forge Vurgu Renkleri */
+  /* Forge Vurgu Renkleri (her iki temada da ortak) */
   --accent-amber: #f59e0b;
   --accent-amber-glow: rgba(245, 158, 11, 0.15);
   --accent-orange: #f97316;
@@ -31,11 +15,8 @@
   --accent-purple: #8b5cf6;
   --accent-blue: #3b82f6;
   --accent-emerald: #10b981;
-
-  /* Gradient */
   --gradient-forge: linear-gradient(135deg, #f59e0b, #ef4444, #8b5cf6);
   --gradient-subtle: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(139, 92, 246, 0.1));
-  --gradient-sidebar: linear-gradient(180deg, #0d0d1a 0%, #07070f 100%);
 
   /* Boyutlar */
   --sidebar-width: 280px;
@@ -54,6 +35,69 @@
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ── Karanlık tema (default) ── */
+  --bg-primary: #07070f;
+  --bg-secondary: #0d0d1a;
+  --bg-tertiary: #141428;
+  --bg-elevated: #1a1a35;
+  --bg-hover: #22224a;
+  --glass-bg: rgba(20, 20, 50, 0.55);
+  --glass-bg-strong: rgba(13, 13, 26, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --text-primary: #eaeaf0;
+  --text-secondary: #9090b0;
+  --text-muted: #5a5a7a;
+  --text-inverse: #07070f;
+  --gradient-sidebar: linear-gradient(180deg, #0d0d1a 0%, #07070f 100%);
+  --shadow-card: 0 4px 18px rgba(0, 0, 0, 0.35);
+  --highlight-bg: rgba(245, 158, 11, 0.35);
+  --highlight-color: #fff;
+}
+
+/* ── Açık tema ── */
+:root[data-theme="light"] {
+  --bg-primary: #f6f5f1;
+  --bg-secondary: #fbfaf6;
+  --bg-tertiary: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-hover: #efece4;
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-strong: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-shadow: 0 8px 32px rgba(40, 30, 10, 0.10);
+  --text-primary: #1c1b18;
+  --text-secondary: #5a5650;
+  --text-muted: #8a857c;
+  --text-inverse: #fbfaf6;
+  --gradient-sidebar: linear-gradient(180deg, #fbfaf6 0%, #f3f1ea 100%);
+  --shadow-card: 0 4px 18px rgba(40, 30, 10, 0.08);
+  --highlight-bg: rgba(245, 158, 11, 0.32);
+  --highlight-color: #1c1b18;
+}
+
+/* Otomatik: sistem light ise light, değilse default (dark) */
+@media (prefers-color-scheme: light) {
+  :root[data-theme="auto"] {
+    --bg-primary: #f6f5f1;
+    --bg-secondary: #fbfaf6;
+    --bg-tertiary: #ffffff;
+    --bg-elevated: #ffffff;
+    --bg-hover: #efece4;
+    --glass-bg: rgba(255, 255, 255, 0.62);
+    --glass-bg-strong: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --glass-shadow: 0 8px 32px rgba(40, 30, 10, 0.10);
+    --text-primary: #1c1b18;
+    --text-secondary: #5a5650;
+    --text-muted: #8a857c;
+    --text-inverse: #fbfaf6;
+    --gradient-sidebar: linear-gradient(180deg, #fbfaf6 0%, #f3f1ea 100%);
+    --shadow-card: 0 4px 18px rgba(40, 30, 10, 0.08);
+    --highlight-bg: rgba(245, 158, 11, 0.32);
+    --highlight-color: #1c1b18;
+  }
 }
 
 /* ─── Reset & Base ─────────────────────────────────── */
@@ -118,12 +162,31 @@ body {
   min-width: var(--sidebar-width);
   height: 100%;
   height: 100dvh;
-  background: var(--gradient-sidebar);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
   border-right: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transition: transform var(--transition-normal);
+}
+
+/* Tarayıcı backdrop-filter desteklemiyorsa solid kal */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sidebar { background: var(--gradient-sidebar); }
+}
+
+/* ─── Glass panel utility ──────────────────────────── */
+.glass-panel {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-panel { background: var(--bg-elevated); }
 }
 
 .sidebar-header {
@@ -242,13 +305,19 @@ body {
   white-space: nowrap;
 }
 
-.session-delete-btn {
+.session-item-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.session-action-btn {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
@@ -259,14 +328,19 @@ body {
   transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
 }
 
-.session-item:hover .session-delete-btn,
-.session-item.active .session-delete-btn {
+.session-item:hover .session-action-btn,
+.session-item.active .session-action-btn {
   opacity: 1;
 }
 
-.session-delete-btn:hover {
+.session-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.session-action-btn.session-delete-btn:hover {
   background: rgba(239, 68, 68, 0.2);
-  color: #f87171;
+  color: var(--accent-red);
 }
 
 /* Sidebar alt bölüm */
@@ -358,19 +432,6 @@ body {
 .model-selector-btn:hover {
   border-color: var(--accent-amber);
   color: var(--accent-amber);
-}
-
-.model-selector-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent-emerald);
-  box-shadow: 0 0 6px var(--accent-emerald);
-}
-
-.model-selector-dot.offline {
-  background: var(--text-muted);
-  box-shadow: none;
 }
 
 .model-dropdown {
@@ -610,6 +671,9 @@ body {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .message-content {
@@ -920,29 +984,6 @@ body {
   color: var(--accent-amber);
   font-family: var(--font-sans);
   font-size: 0.7rem;
-}
-
-/* ─── Loading animation ───────────────────────────── */
-.loading-dots {
-  display: flex;
-  gap: 4px;
-  padding: 8px 0;
-}
-
-.loading-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent-amber);
-  animation: loadingDot 1.4s infinite;
-}
-
-.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes loadingDot {
-  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-  40% { opacity: 1; transform: scale(1.2); }
 }
 
 /* ─── Sidebar Nav ──────────────────────────────────── */
@@ -1597,6 +1638,51 @@ body {
     gap: 8px;
   }
 
+  /* Mobilde dokunmatik için: hover'a güvenmeyen butonları daima göster */
+  .session-action-btn,
+  .message-copy-btn {
+    opacity: 1;
+  }
+  .session-action-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Auth modal mobilde nefes alabilir hale gel */
+  .auth-modal-overlay {
+    padding: 12px;
+    align-items: flex-end;
+  }
+  .auth-modal {
+    max-width: 100%;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+
+  /* Command palette mobilde tam genişlik */
+  .cmdk-overlay {
+    padding-top: 8vh;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .cmdk-panel {
+    max-height: 80vh;
+  }
+  .cmdk-footer {
+    display: none;
+  }
+
+  /* Chat search bar mobilde sıkışık */
+  .chat-search-bar {
+    padding: 6px 12px;
+  }
+
+  /* Sidebar daha geniş (mobilde okunaklı), drawer animasyon yumuşak */
+  .sidebar {
+    width: min(86vw, 320px);
+    min-width: 0;
+  }
+
   .welcome-suggestion {
     padding: 12px 14px;
     font-size: 0.85rem;
@@ -1982,6 +2068,227 @@ body {
   border-color: var(--accent-amber);
 }
 
+.sidebar-theme-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+.sidebar-theme-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--glass-border);
+}
+.sidebar-theme-btn span {
+  font-weight: 500;
+}
+
+/* ─── Chat Arama Barı ──────────────────────────────── */
+.chat-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--glass-bg);
+  border-bottom: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.chat-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 4px 6px;
+}
+.chat-search-input::placeholder {
+  color: var(--text-muted);
+}
+.chat-search-count {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.chat-search-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+}
+.chat-search-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.chat-search-mark {
+  background: var(--highlight-bg);
+  color: var(--highlight-color);
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+/* ─── Mesaj Kopyalama Butonu ───────────────────────── */
+.message-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-family: inherit;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+.message:hover .message-copy-btn {
+  opacity: 1;
+}
+.message-copy-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--glass-border);
+}
+
+/* ─── Command Palette ──────────────────────────────── */
+.cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 7, 15, 0.55);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  z-index: 10000;
+  animation: auth-fade-in 120ms ease-out;
+}
+:root[data-theme="light"] .cmdk-overlay { background: rgba(40, 30, 10, 0.25); }
+@media (prefers-color-scheme: light) {
+  :root[data-theme="auto"] .cmdk-overlay { background: rgba(40, 30, 10, 0.25); }
+}
+
+.cmdk-panel {
+  width: 100%;
+  max-width: 540px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+  animation: auth-slide-up 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.cmdk-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--glass-border);
+  color: var(--text-muted);
+}
+.cmdk-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+.cmdk-input::placeholder { color: var(--text-muted); }
+.cmdk-kbd, .cmdk-footer kbd {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--glass-border);
+}
+.cmdk-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+.cmdk-group {
+  padding: 4px 0;
+}
+.cmdk-group-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 6px 16px 4px;
+  font-weight: 600;
+}
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: background var(--transition-fast);
+}
+.cmdk-item-selected {
+  background: var(--bg-hover);
+}
+.cmdk-icon {
+  color: var(--text-secondary);
+  display: flex;
+  flex-shrink: 0;
+}
+.cmdk-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmdk-hint {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+}
+.cmdk-empty {
+  padding: 24px 16px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 0.85rem;
+}
+.cmdk-footer {
+  display: flex;
+  gap: 16px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
 /* ─── Auth Modal ───────────────────────────────────── */
 .auth-modal-overlay {
   position: fixed;
@@ -2003,12 +2310,17 @@ body {
   position: relative;
   width: 100%;
   max-width: 380px;
-  background: var(--bg-secondary);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--glass-shadow);
   padding: 28px;
   animation: auth-slide-up 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .auth-modal { background: var(--bg-secondary); }
 }
 @keyframes auth-slide-up {
   from { opacity: 0; transform: translateY(10px); }

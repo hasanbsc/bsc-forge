@@ -46,6 +46,11 @@ class SessionCreate(BaseModel):
     product: str = "forge"
 
 
+class SessionUpdate(BaseModel):
+    """Oturum güncelleme (kısmi)."""
+    pinned: bool | None = None
+
+
 async def _ws_can_use_session(
     session_id: str, user_id: Optional[str], browser_id: Optional[str]
 ) -> bool:
@@ -136,6 +141,24 @@ async def get_session_messages(
         raise HTTPException(status_code=403, detail="Bu oturuma erişim yetkin yok.")
     messages = await chat_history.get_messages(session_id)
     return {"messages": messages}
+
+
+@router.patch("/sessions/{session_id}")
+async def update_session(
+    session_id: str,
+    body: SessionUpdate,
+    user: Optional[dict] = Depends(get_current_user_optional),
+    x_browser_id: Optional[str] = Header(default=None, alias="X-Browser-Id"),
+):
+    """Oturumu güncelle (şimdilik sadece `pinned`)."""
+    session = await chat_history.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
+    if not _can_access(session, user, x_browser_id):
+        raise HTTPException(status_code=403, detail="Bu oturumu güncelleme yetkin yok.")
+    if body.pinned is not None:
+        await chat_history.set_pinned(session_id, body.pinned)
+    return {"status": "güncellendi"}
 
 
 @router.delete("/sessions/{session_id}")

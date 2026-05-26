@@ -41,6 +41,16 @@ export const deleteSession = async (sessionId) => {
   return await res.json();
 };
 
+export const setSessionPinned = async (sessionId, pinned) => {
+  const res = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}`, {
+    method: 'PATCH',
+    headers: headersJson(),
+    body: JSON.stringify({ pinned }),
+  });
+  if (!res.ok) throw new Error('Sohbet pinlenemedi');
+  return await res.json();
+};
+
 export const fetchModels = async () => {
   const res = await fetch(`${API_BASE_URL}/models`);
   if (!res.ok) throw new Error('Modeller getirilemedi');
