@@ -108,15 +108,19 @@ Sıradaki ana hat: **Faz 5 — İlk Ürün (English Buddy)**.
 - ✅ Frontend: `AuthModal` + Sidebar user widget + WS auth-version reconnect
 - Kapsam dışı: şifre kurtarma, e-posta doğrulama, refresh token, 2FA
 
-### 7.2 2D Oyun Yaratma Ürünü
-- Yeni built-in ürün: "2D Oyun Stüdyosu"
-- **Yalnızca yerel model** ile çalışsın (kotaya dokunmadan, gerekirse
-  fine-tune edilecek)
-- Oyun kodlamada en iyi yerel modeli araştır + seç (örn. Qwen Coder, DeepSeek
-  Coder V2, Phi-3 — küçük donanımda hangisi en iyi 2D oyun kodu üretir?)
-- Çıktı: Canvas/HTML5 + JavaScript veya Pygame
-- Fine-tune edilecekse: `Faz 6 (QLoRA)` üzerinden — kullanıcı eğitim verisini
-  birlikte hazırlar
+### 7.2 2D Oyun Yaratma Ürünü 🟢
+- ✅ Yeni built-in ürün: **"2D Oyun Stüdyosu"** (`product_store.py`, id `game_studio`)
+- ✅ **Yalnızca yerel model**: `qwen2.5-coder:3b` (ollama). Cascade ollama'da
+  bittiği için buluta düşmez — kotaya dokunmaz.
+- ✅ Motor seçimi: **Kaplay** (Kaboom.js'in devamı) — VibeGame yaklaşımının 2D
+  karşılığı. CDN'den tek `<script>`, deklaratif/özlü API, modelin eğitim
+  verisinde bol. Çıktı: tek `oyun.html`.
+- ✅ Mimari uyum: Ollama tool-calling yapmadığı için oyun ```html kod bloğu
+  olarak üretilir; `ChatWindow` bloğu yakalar, Kaplay CDN'ini garantili doğru
+  URL'e sabitler (küçük model URL bozabiliyor) ve kod paneline gönderir.
+- ✅ Önizleme: mevcut CodePanel `srcDoc` iframe'inde "Önizle" ile anında oynanır.
+- 🔸 Kalan: gameplay kalitesi 3B model sınırında (few-shot örnek prompt'a
+  eklenirse iyileşir). Gerekirse Faz 6 (QLoRA) ile fine-tune.
 
 ### 7.3 Ürüne Özel Sohbet Teması
 - Her ürün kendi sohbet temasına sahip olsun (renkler, ikonlar, arka plan)

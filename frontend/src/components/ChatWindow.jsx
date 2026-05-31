@@ -6,6 +6,32 @@ import { ChatWebSocket } from '../services/websocket';
 const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 const fmtTok = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
 
+// 2D Oyun Stüdyosu: yerel model oyunu ```html kod bloğu olarak üretir
+// (Ollama tool-calling yapmaz). Bloğu çıkar, Kaplay CDN'ini garantili doğru
+// URL'e sabitle (küçük model URL'i bozabiliyor) ve kod paneline gönder.
+const KAPLAY_CDN = 'https://unpkg.com/kaplay@3001.0.19/dist/kaplay.js';
+
+function extractHtmlBlock(text) {
+  if (!text) return null;
+  const fence = text.match(/```(?:html)?\s*\n([\s\S]*?)```/i);
+  if (fence && /<(!doctype|html|script|canvas)/i.test(fence[1])) return fence[1].trim();
+  const doc = text.match(/<!DOCTYPE html>[\s\S]*<\/html>/i);
+  return doc ? doc[0].trim() : null;
+}
+
+function normalizeGameHtml(html) {
+  // Kaplay/Kaboom script src'sini kanonik URL'e zorla (model yanlış yazsa da çalışsın)
+  let out = html.replace(
+    /<script\b[^>]*\bsrc=["'][^"']*(?:kaplay|kaboom)[^"']*["'][^>]*><\/script>/i,
+    `<script src="${KAPLAY_CDN}"></script>`,
+  );
+  // Hiç kaplay script'i yoksa <body> başına ekle
+  if (!/unpkg\.com\/kaplay/i.test(out) && /<body[^>]*>/i.test(out)) {
+    out = out.replace(/<body[^>]*>/i, (m) => `${m}\n<script src="${KAPLAY_CDN}"></script>`);
+  }
+  return out;
+}
+
 function resolveModelDisplay(provider, model, models) {
   if (provider === 'auto') {
     return { label: 'Model seçiliyor…', provider: 'auto', model: 'auto', model_type: 'router' };
@@ -110,6 +136,15 @@ export default function ChatWindow({
     setSearchOpen(false);
     setSearchQuery('');
   };
+
+  // Oyun Stüdyosu: tamamlanan yanıttaki ```html oyununu kod paneline gönder
+  useEffect(() => {
+    if (activeProductId !== 'game_studio') return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant' || last.isStreaming) return;
+    const html = extractHtmlBlock(last.content);
+    if (html) onFileTouched?.('oyun.html', normalizeGameHtml(html));
+  }, [messages, activeProductId, onFileTouched]);
 
   const handleCopy = async (msg) => {
     try {
