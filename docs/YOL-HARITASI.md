@@ -118,9 +118,15 @@ Sıradaki ana hat: **Faz 5 — İlk Ürün (English Buddy)**.
 - ✅ Mimari uyum: Ollama tool-calling yapmadığı için oyun ```html kod bloğu
   olarak üretilir; `ChatWindow` bloğu yakalar, Kaplay CDN'ini garantili doğru
   URL'e sabitler (küçük model URL bozabiliyor) ve kod paneline gönderir.
-- ✅ Önizleme: mevcut CodePanel `srcDoc` iframe'inde "Önizle" ile anında oynanır.
-- 🔸 Kalan: gameplay kalitesi 3B model sınırında (few-shot örnek prompt'a
-  eklenirse iyileşir). Gerekirse Faz 6 (QLoRA) ile fine-tune.
+- ✅ Önizleme: mevcut CodePanel `srcDoc` iframe'inde, oyun üretilince otomatik
+  "Önizle" sekmesine geçilir, anında oynanır.
+- ✅ **Garantili oynanabilirlik (şablon kütüphanesi)**: 3B model sıfırdan
+  üretmede tutarsız (area() eksik vb.) ama DÜZENLEMEDE güvenilir. `gameTemplates.js`
+  4 elle doğrulanmış oyun (kaçış/yılan/toplama/flappy) içerir; yaygın türde
+  istek gelince şablon (a) anında panele oynanabilir gelir, (b) modele tohumlanır
+  → uyarlar. Model bozarsa `isLikelyPlayable` güvenlik ağı şablona düşer.
+- Fine-tune (Faz 6): yalnızca serbest/özgün üretim tutarlılığı gerekirse — şu an
+  gerekmiyor, şablon yaklaşımı çözdü.
 
 ### 7.3 Ürüne Özel Sohbet Teması
 - Her ürün kendi sohbet temasına sahip olsun (renkler, ikonlar, arka plan)
