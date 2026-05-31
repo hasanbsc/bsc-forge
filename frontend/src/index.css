@@ -886,7 +886,7 @@ body {
   cursor: not-allowed;
 }
 
-/* ─── Orchestrator toggle (yerel Mistral 7B ön-analiz) ──────── */
+/* ─── Orchestrator toggle (yerel LLM ön-analiz) ──────── */
 .chat-orchestrate-btn {
   width: 36px;
   height: 36px;

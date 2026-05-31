@@ -67,7 +67,7 @@ export default function ChatWindow({
   const [approvalError, setApprovalError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [batchSaveAll, setBatchSaveAll] = useState(false); // "Tümünü kabul et" modu
-  const [orchestrate, setOrchestrate] = useState(false); // Orkestra şefi (yerel Mistral 7B ön-analiz)
+  const [orchestrate, setOrchestrate] = useState(false); // Orkestra şefi (yerel LLM ön-analiz)
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedMsgId, setCopiedMsgId] = useState(null);
@@ -249,9 +249,20 @@ export default function ChatWindow({
     };
   }, [authVersion]);
 
-  const sendText = (text, overrideSessionId) => {
+  const sendText = async (text, overrideSessionId) => {
     const userMsg = (text || '').trim();
     if (!userMsg || isStreaming || !wsRef.current?.isConnected) return;
+
+    // Oturum yoksa anında oluştur — kullanıcı karşılama ekranında doğrudan
+    // yazıp gönderebilsin diye (ekstra "yeni sohbet" tıklaması gerekmez).
+    let sessionId = overrideSessionId ?? currentSession?.id;
+    if (!sessionId) {
+      if (!onNewSession) return;
+      const newSession = await onNewSession();
+      sessionId = newSession?.id;
+      if (!sessionId) return;
+    }
+
     setInput('');
 
     const history = messages
@@ -265,7 +276,7 @@ export default function ChatWindow({
 
     wsRef.current.sendMessage(
       userMsg,
-      overrideSessionId ?? currentSession?.id,
+      sessionId,
       provider,
       model,
       history,
@@ -280,16 +291,7 @@ export default function ChatWindow({
     sendText(input);
   };
 
-  const handleSuggestionClick = async (text) => {
-    if (isStreaming || !wsRef.current?.isConnected) return;
-    if (currentSession?.id) {
-      sendText(text);
-      return;
-    }
-    if (!onNewSession) return;
-    const newSession = await onNewSession();
-    if (newSession?.id) sendText(text, newSession.id);
-  };
+  const handleSuggestionClick = (text) => sendText(text);
 
   const popApprovalQueue = () => {
     setApprovalQueue((prev) => {
@@ -452,32 +454,9 @@ export default function ChatWindow({
     }
   };
 
-  if (!currentSession && messages.length === 0) {
-    return (
-      <div className="welcome-screen">
-        <div className="welcome-icon">
-          <Flame size={40} color="white" />
-        </div>
-        <h1 className="welcome-title">BSC Forge'a Hoş Geldiniz</h1>
-        <p className="welcome-subtitle">Kişisel yapay zeka portalınız. Yeni bir ürün yaratmak veya soru sormak için yazmaya başlayın.</p>
-
-        <div className="welcome-suggestions">
-          <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Bana BSC Forge hakkında bilgi ver.')}>
-            Bana BSC Forge hakkında bilgi ver
-          </button>
-          <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Yeni bir "İngilizce Öğretmeni" ajanı oluştur.')}>
-            Yeni bir "İngilizce Öğretmeni" ajanı oluştur
-          </button>
-          <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Python ile basit bir API nasıl yazarım?')}>
-            Python ile basit bir API nasıl yazarım?
-          </button>
-          <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Bilgisayarımın donanım özelliklerine göre hangi yerel modelleri çalıştırabilirim?')}>
-            Hangi yerel modelleri çalıştırabilirim?
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Henüz mesaj yoksa karşılama içeriğini mesaj alanının içinde göster —
+  // input alanı her zaman altta görünür kalsın ki kullanıcı doğrudan yazabilsin.
+  const showWelcome = messages.length === 0 && !normalizedQuery;
 
   return (
     <>
@@ -502,6 +481,30 @@ export default function ChatWindow({
       )}
       <div className="chat-messages">
         <div className="chat-messages-inner">
+          {showWelcome && (
+            <div className="welcome-screen">
+              <div className="welcome-icon">
+                <Flame size={40} color="white" />
+              </div>
+              <h1 className="welcome-title">BSC Forge'a Hoş Geldiniz</h1>
+              <p className="welcome-subtitle">Kişisel yapay zeka portalınız. Aşağıdan doğrudan yazmaya başlayın veya bir öneri seçin.</p>
+
+              <div className="welcome-suggestions">
+                <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Bana BSC Forge hakkında bilgi ver.')}>
+                  Bana BSC Forge hakkında bilgi ver
+                </button>
+                <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Yeni bir "İngilizce Öğretmeni" ajanı oluştur.')}>
+                  Yeni bir "İngilizce Öğretmeni" ajanı oluştur
+                </button>
+                <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Python ile basit bir API nasıl yazarım?')}>
+                  Python ile basit bir API nasıl yazarım?
+                </button>
+                <button className="welcome-suggestion" onClick={() => handleSuggestionClick('Bilgisayarımın donanım özelliklerine göre hangi yerel modelleri çalıştırabilirim?')}>
+                  Hangi yerel modelleri çalıştırabilirim?
+                </button>
+              </div>
+            </div>
+          )}
           {filteredMessages.map((msg) => (
             <div key={msg.id} className={`message ${msg.role === 'tool' ? 'message-tool-row' : ''}`}>
               <div className={`message-avatar ${msg.role}`}>
@@ -667,7 +670,7 @@ export default function ChatWindow({
               onClick={() => setOrchestrate((v) => !v)}
               title={
                 orchestrate
-                  ? 'Orkestra şefi açık — yerel Mistral 7B ile ön analiz (2-15s gecikme)'
+                  ? 'Orkestra şefi açık — yerel model ile ön analiz (1-8s gecikme)'
                   : 'Orkestra şefi kapalı — sadece hızlı heuristik (sıfır gecikme)'
               }
               disabled={isStreaming}

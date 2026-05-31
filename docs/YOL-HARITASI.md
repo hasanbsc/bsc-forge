@@ -149,20 +149,22 @@ Sıradaki ana hat: **Faz 5 — İlk Ürün (English Buddy)**.
 - Tercih edilecek: **Cloudflare Tunnel** (en kararlı + kalıcı + ücretsiz)
 - Backend HTTPS arkasından servis edilebilir hale getir; CORS uygun ayarlı
 
-### 7.6 Lokal Model Temizliği
-- Gereksiz / kullanılmayan Ollama modelleri kaldırılacak
-- Aday: hangileri router/cascade tarafından hiç seçilmiyor? Telemetri loglarına
-  bak veya `model_registry.py` priority'lerine göre karar ver
-- Minimum tutulması gerekenler (mevcut donanım için):
-  - `qwen2.5-coder:7b` — üretim
-  - `mistral:7b` — orkestra şefi + Türkçe
-  - Diğer 1B-1.5B modeller (llama3.2:1b, qwen2.5-coder:1.5b) gerekiyorsa kalır
+### 7.6 Lokal Model Temizliği 🟢
+- ✅ 7B+ modeller donanımda zorladığı için tamamen kaldırıldı (mistral:7b,
+  qwen2.5-coder:7b/14b, codestral:22b, deepseek-coder-v2:16b, gemma2:2b, llama3.2:1b)
+- ✅ `model_registry.py` 3B sınıfına sadeleşti; yüklü modellerle birebir uyumlu
+- ✅ Orkestra şefi `mistral:7b` → **`llama3.2:3b`** (config'ten `ORCHESTRATOR_MODEL`)
+- Güncel yerel modeller (donanım için minimum + yeterli):
+  - `qwen2.5-coder:3b` — üretim/kodlama
+  - `qwen2.5-coder:1.5b` — hafif kodlama
+  - `llama3.2:3b` — orkestra şefi + hızlı/Türkçe/İngilizce/reasoning
 
-### 7.7 `/baslat` ile Anında Hazır
-- `/baslat` skill'i çalıştırıldığında **sohbet ekranı doğrudan kullanılabilir**
-  olsun (şu an bir-iki tıklama daha gerek)
-- Backend + frontend ayağa kalktıktan sonra otomatik browser açılabilir
-- Veya: `/baslat` çıktısında sohbet URL'i tıklanabilir link olarak verilir
+### 7.7 `/baslat` ile Anında Hazır 🟢
+- ✅ Karşılama ekranı artık input'u gizlemiyor — kutu her zaman altta görünür;
+  ilk mesaj yazıldığında oturum **otomatik** oluşturulur (ekstra tıklama yok)
+- ✅ `/baslat` skill'i frontend sağlıklıysa Windows tarayıcısını otomatik açar
+  (`explorer.exe` → fallback `cmd.exe /c start`)
+- ✅ Skill özeti sohbet URL'ini tıklanabilir link olarak verir
 
 ### 7.8 Model Zaman Aşımı Politikası
 - 1-2 dakikadan uzun süren modelleri **otomatik devre dışı bırak**

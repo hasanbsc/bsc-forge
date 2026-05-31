@@ -64,10 +64,23 @@ echo "Frontend PID: $!"
 sleep 4 && curl -s http://localhost:5173/ | head -3
 ```
 
-### 3. Özet
+### 3. Tarayıcıyı aç (anında hazır sohbet)
 
-Her şey başarılıysa kullanıcıya şunu söyle:
+Frontend sağlıklıysa, WSL'den Windows'un varsayılan tarayıcısında sohbet
+ekranını otomatik aç (kullanıcıya ekstra tıklama bırakma):
 
+```bash
+explorer.exe "http://localhost:5173" 2>/dev/null || cmd.exe /c start "" "http://localhost:5173" 2>/dev/null || true
+```
+
+> Sohbet ekranı artık açılışta doğrudan yazıma hazır gelir — karşılama
+> ekranının altındaki kutuya yazıp Enter'a basmak yeterli; oturum otomatik
+> oluşturulur.
+
+### 4. Özet
+
+Her şey başarılıysa kullanıcıya şunu söyle (linki tıklanabilir markdown olarak ver):
+
+- 🟢 Sohbet hazır: **http://localhost:5173**
 - Backend: http://localhost:8000
-- Frontend: http://localhost:5173
 - Loglar: `tail -f /tmp/bsc-backend.log` / `tail -f /tmp/bsc-frontend.log`
