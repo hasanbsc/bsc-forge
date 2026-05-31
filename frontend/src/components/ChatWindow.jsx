@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Send, User, Flame, Wrench, Cloud, Cpu, Sparkles, FolderOpen, FileX, ArrowUp, ArrowDown, Music, Search, X as XIcon, Copy, Check, Play } from 'lucide-react';
 import { ChatWebSocket } from '../services/websocket';
+import { detectGameGenre, getTemplate } from '../services/gameTemplates';
 
 const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 const fmtTok = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
@@ -30,6 +31,20 @@ function normalizeGameHtml(html) {
     out = out.replace(/<body[^>]*>/i, (m) => `${m}\n<script src="${KAPLAY_CDN}"></script>`);
   }
   return out;
+}
+
+// Modelin uyarladığı oyun "muhtemelen oynanabilir" mi? Güvenlik ağı için hafif
+// statik kontrol — geçemezse tohumlanan şablona düşülür.
+function isLikelyPlayable(html) {
+  if (!html || html.length < 300) return false;
+  if (!/kaplay\s*\(/.test(html)) return false;
+  if (!/\bgo\s*\(/.test(html)) return false;
+  // Çarpışma kullanılıyorsa oyuncu + hedef için en az 2 area() olmalı
+  if (/onCollide\s*\(/.test(html)) {
+    const areaCount = (html.match(/\barea\s*\(/g) || []).length;
+    if (areaCount < 2) return false;
+  }
+  return true;
 }
 
 function resolveModelDisplay(provider, model, models) {
@@ -122,6 +137,7 @@ export default function ChatWindow({
   const wsGenerationRef = useRef(0);
   const activeModelRef = useRef(null);
   const savedDirHandleRef = useRef(null); // İlk seçimden sonra aynı klasör kullanılır
+  const seededTemplateRef = useRef(null); // Oyun Stüdyosu: bu turda tohumlanan şablon (güvenlik ağı)
 
   const pendingApproval = approvalQueue[0] || null;
 
@@ -155,11 +171,12 @@ export default function ChatWindow({
     setSearchQuery('');
   };
 
-  // Oyun Stüdyosu'nda tamamlanmış asistan yanıtındaki oyun kodu (yoksa null)
-  const gameOf = (msg) =>
-    activeProductId === 'game_studio' && msg.role === 'assistant' && !msg.isStreaming
-      ? extractHtmlBlock(msg.content)
-      : null;
+  // Oyun Stüdyosu'nda tamamlanmış asistan yanıtındaki oyun kodu (yoksa null).
+  // Model hata/boş döndü ama tohumlanan şablon panelde hazırsa kartı yine göster.
+  const gameOf = (msg) => {
+    if (activeProductId !== 'game_studio' || msg.role !== 'assistant' || msg.isStreaming) return null;
+    return extractHtmlBlock(msg.content) || seededTemplateRef.current || null;
+  };
 
   // Oyun Stüdyosu: tamamlanan yanıttaki ```html oyununu kod paneline gönder
   useEffect(() => {
@@ -167,7 +184,11 @@ export default function ChatWindow({
     const last = messages[messages.length - 1];
     if (!last || last.role !== 'assistant' || last.isStreaming) return;
     const html = extractHtmlBlock(last.content);
-    if (html) onFileTouched?.('oyun.html', normalizeGameHtml(html), true);
+    const seeded = seededTemplateRef.current;
+    // Model çıktısı oynanabilir görünüyorsa onu kullan; değilse (veya hiç oyun
+    // çıkmadıysa) tohumlanan doğrulanmış şablona düş — garantili oynanabilir.
+    const chosen = html && isLikelyPlayable(normalizeGameHtml(html)) ? html : (seeded || html);
+    if (chosen) onFileTouched?.('oyun.html', normalizeGameHtml(chosen), true);
   }, [messages, activeProductId, onFileTouched]);
 
   const handleCopy = async (msg) => {
@@ -336,9 +357,19 @@ export default function ChatWindow({
         .reverse()
         .find(m => m.role === 'assistant' && !m.isError && extractHtmlBlock(m.content));
       const code = lastGame && extractHtmlBlock(lastGame.content);
-      history = code
-        ? [{ role: 'assistant', content: '```html\n' + normalizeGameHtml(code) + '\n```' }]
-        : [];
+      if (code) {
+        // Düzenleme: mevcut oyunu temel al, tohum yok
+        history = [{ role: 'assistant', content: '```html\n' + normalizeGameHtml(code) + '\n```' }];
+        seededTemplateRef.current = null;
+      } else {
+        // İlk istek: tür eşleşirse doğrulanmış şablonu tohumla → model uyarlar
+        const tpl = getTemplate(detectGameGenre(userMsg));
+        seededTemplateRef.current = tpl;
+        history = tpl ? [{ role: 'assistant', content: '```html\n' + tpl + '\n```' }] : [];
+        // Şablonu ANINDA panelde oynanabilir göster — model yavaş/başarısız olsa
+        // bile kullanıcı beklemez; model başarılı olursa effect üstüne yazar.
+        if (tpl) onFileTouched?.('oyun.html', normalizeGameHtml(tpl), true);
+      }
     }
 
     streamIndexRef.current = null;
