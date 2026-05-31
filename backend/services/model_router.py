@@ -80,7 +80,7 @@ class RouteDecision:
     # Yeni: orkestrasyon katmanı kararı
     layer: str = "analysis"  # "production" (uzun üretim, yerel tercih) | "analysis" (bulut tercih)
     complexity: str = "medium"  # "simple" | "medium" | "complex"
-    source: str = "heuristic"  # "heuristic" | "orchestrator" (Mistral 7B fallback)
+    source: str = "heuristic"  # "heuristic" | "orchestrator" (yerel LLM fallback)
 
     def to_dict(self) -> dict:
         return {
@@ -335,8 +335,8 @@ class ModelRouter:
         """Manuel veya otomatik model seçimi.
 
         `use_orchestrator=True` ise heuristik karar verildikten sonra yerel
-        Mistral 7B'ye danışılır; çelişki varsa orchestrator kararı override eder.
-        Maliyet: 2-15 sn (Mistral cold start). Default kapalı — UI'dan opt-in.
+        orchestrator modeline danışılır; çelişki varsa orchestrator kararı
+        override eder. Maliyet: 1-8 sn (cold start). Default kapalı — UI'dan opt-in.
         """
         if not self._catalog:
             await self.refresh_catalog()
@@ -399,8 +399,8 @@ class ModelRouter:
                 source="heuristic",
             )
 
-        # Opsiyonel: yerel orchestrator (Mistral 7B) ile ikincil görüş
-        # Yalnızca user opt-in ettiyse — 2-15 sn gecikme maliyeti var.
+        # Opsiyonel: yerel orchestrator modeli ile ikincil görüş
+        # Yalnızca user opt-in ettiyse — 1-8 sn gecikme maliyeti var.
         source = "heuristic"
         if use_orchestrator:
             decision = await orchestrator.analyze(message)

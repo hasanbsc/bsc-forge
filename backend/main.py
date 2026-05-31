@@ -26,14 +26,14 @@ STATIC_DIR = Path(__file__).parent.parent / "frontend" / "dist"
 
 
 async def _warm_orchestrator() -> None:
-    """Mistral 7B'yi background'da sıcak tut; keep_alive=30m ile çalışır kalır.
+    """Orchestrator modelini background'da sıcak tut; keep_alive ile çalışır kalır.
 
-    İlk gerçek kullanıcı isteğinde cold start 30-40s sürmesin diye startup'ta
-    arka planda küçük bir analyze çağrısı yapılır.
+    İlk gerçek kullanıcı isteğinde cold start gecikmesi yaşanmasın diye startup'ta
+    arka planda küçük bir analyze çağrısı yapılır. Model `settings.ORCHESTRATOR_MODEL`.
     """
     try:
         if await orchestrator.available():
-            logger.info("Orchestrator warm-up başlatıldı (Mistral 7B)")
+            logger.info("Orchestrator warm-up başlatıldı (%s)", settings.ORCHESTRATOR_MODEL)
             await orchestrator.analyze("merhaba")
             logger.info("Orchestrator hazır")
     except Exception as e:
@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     await chat_history.init_db()
     await user_store.init_table()
     await product_store.init_table()
-    # Mistral'ı background'da ısıt — startup'ı bloklamaz
+    # Orchestrator'ı background'da ısıt — startup'ı bloklamaz
     asyncio.create_task(_warm_orchestrator())
     yield
 

@@ -1,12 +1,13 @@
 """BSC Forge — Orkestra Şefi (yerel LLM ön analiz katmanı).
 
 Heuristik (model_router.detect_layer) belirsiz kalan durumlarda devreye girer.
-Yerel Mistral 7B (Ollama) ile prompt analizi yapar; karmaşıklık + katman
-(production/analysis) önerir. Sıcak (keep_alive) tutulur ki ikinci çağrı hızlı olsun.
+Yerel orchestrator modeli (Ollama, varsayılan llama3.2:3b) ile prompt analizi
+yapar; karmaşıklık + katman (production/analysis) önerir. Sıcak (keep_alive)
+tutulur ki ikinci çağrı hızlı olsun.
 
 Maliyet/UX dengesi:
-- İlk çağrı 5-15 sn (Mistral cold start)
-- Sonraki çağrılar 2-5 sn (keep_alive=10m sayesinde sıcak)
+- İlk çağrı cold start (3B sınıfı CPU'da ~3-8 sn)
+- Sonraki çağrılar 1-3 sn (keep_alive sayesinde sıcak)
 - Heuristik kesin karar verebiliyorsa orchestrator HİÇ çağrılmaz (sıfır gecikme)
 """
 from __future__ import annotations
@@ -23,9 +24,8 @@ from services.provider_utils import is_ollama_available
 
 logger = logging.getLogger("bsc_forge.orchestrator")
 
-ORCHESTRATOR_MODEL = "mistral:7b"
 KEEP_ALIVE = "30m"
-REQUEST_TIMEOUT = 60.0  # saniye — Mistral 7B CPU'da cold start 20-40s sürer
+REQUEST_TIMEOUT = 30.0  # saniye — 3B sınıfı için yeterli (timeout politikası ayrıca)
 
 # Few-shot örnekli, sıkı JSON dönüş için optimize edilmiş sistem promptu
 _SYSTEM_PROMPT = """Görev sınıflandırıcısın. Kullanıcı isteğini analiz et ve SADECE geçerli JSON döndür.
@@ -62,7 +62,7 @@ class OrchestratorDecision:
 class Orchestrator:
     """Belirsiz isteklerde devreye giren yerel ön-analiz LLM'i.
 
-    `available()` ile Ollama + Mistral'ın hazır olup olmadığını kontrol et.
+    `available()` ile Ollama + orchestrator modelinin hazır olup olmadığını kontrol et.
     `analyze(message)` ile karar al — hata/timeout durumunda None döner.
     """
 
@@ -70,7 +70,7 @@ class Orchestrator:
         self._available_cache: bool | None = None
 
     async def available(self) -> bool:
-        """Ollama ayakta ve Mistral 7B yüklü mü?"""
+        """Ollama ayakta ve `settings.ORCHESTRATOR_MODEL` yüklü mü?"""
         if self._available_cache is not None:
             return self._available_cache
         if not await is_ollama_available():
@@ -84,9 +84,7 @@ class Orchestrator:
                     self._available_cache = False
                     return False
                 names = [m.get("name", "") for m in r.json().get("models", [])]
-                self._available_cache = any(
-                    n.startswith("mistral") for n in names
-                )
+                self._available_cache = settings.ORCHESTRATOR_MODEL in names
         except Exception:
             self._available_cache = False
         return self._available_cache
@@ -105,7 +103,7 @@ class Orchestrator:
             return None
 
         payload = {
-            "model": ORCHESTRATOR_MODEL,
+            "model": settings.ORCHESTRATOR_MODEL,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": f"İstek: {message!r}"},

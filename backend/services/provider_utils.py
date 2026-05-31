@@ -54,12 +54,39 @@ def is_quota_or_rate_limit(exc: BaseException | str) -> bool:
 
 
 def is_fallbackable_error(exc: BaseException | str) -> bool:
-    """Bir sonraki sağlayıcıya geçilebilir mi?"""
+    """Bir sonraki sağlayıcıya geçilebilir mi?
+
+    Politika: bulut kaynaklı **her** hatada yerel modele cascade edilir.
+    Kullanıcı ihtiyacı — cloud sağlayıcıdan yanıt alamazsa Ollama devreye girsin.
+    """
     text = str(exc).lower()
     if is_quota_or_rate_limit(text):
         return True
-    # Geçici sunucu hataları
-    if any(x in text for x in ("503", "502", "504", "unavailable", "overloaded")):
+    if is_auth_error(text):  # 401, invalid api key, api key expired
+        return True
+    # Sunucu hataları (5xx)
+    if any(x in text for x in ("500", "502", "503", "504", "unavailable", "overloaded", "bad gateway", "service unavailable")):
+        return True
+    # Ağ / DNS / SSL hataları
+    network_markers = (
+        "could not resolve",
+        "name resolution",
+        "name or service not known",
+        "errno -3",
+        "errno -2",
+        "connection refused",
+        "connection reset",
+        "connection error",
+        "connecterror",
+        "connect_timeout",
+        "read_timeout",
+        "readtimeout",
+        "timeout",
+        "ssl",
+        "tls",
+        "certificate",
+    )
+    if any(m in text for m in network_markers):
         return True
     # Tool/function call sorunları (Groq Llama, Gemini MALFORMED_FUNCTION_CALL)
     tool_markers = (

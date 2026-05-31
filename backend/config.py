@@ -37,6 +37,9 @@ class Settings:
 
     # Ollama
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    # Orkestra şefi (görev sınıflandırma) için kullanılan yerel model.
+    # Donanıma göre değiştirilebilir; varsayılan 3B sınıfı, hafif ve hızlı.
+    ORCHESTRATOR_MODEL: str = os.getenv("ORCHESTRATOR_MODEL", "llama3.2:3b")
 
     # Sunucu
     BACKEND_HOST: str = os.getenv("BACKEND_HOST", "0.0.0.0")

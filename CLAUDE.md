@@ -42,6 +42,7 @@ curl -X POST http://localhost:8000/api/route \
 - `GROQ_API_KEY` — zorunlu (yedek)
 - `DEEPSEEK_API_KEY` — opsiyonel (üçüncü yedek)
 - `OLLAMA_BASE_URL` — opsiyonel, varsayılan `http://localhost:11434`
+- `ORCHESTRATOR_MODEL` — opsiyonel, varsayılan `llama3.2:3b` (orkestra şefi modeli)
 - `MAX_AGENT_STEPS` — opsiyonel, varsayılan `5`
 
 > **Not:** `.env` yalnızca uygulama başlangıcında okunur. Anahtar değişirse
