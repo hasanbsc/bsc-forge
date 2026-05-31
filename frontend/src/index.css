@@ -585,6 +585,68 @@ body {
   box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
 }
 
+/* ─── Oyun Stüdyosu "Oyun hazır" kartı ────────────── */
+.game-ready-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+}
+
+.game-ready-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.game-ready-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.game-ready-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.game-ready-text strong {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.game-ready-text span {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.game-ready-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--gradient-forge);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.game-ready-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+}
+
 /* ─── Message Bubbles ─────────────────────────────── */
 .message {
   display: flex;

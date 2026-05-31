@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, User, Flame, Wrench, Cloud, Cpu, Sparkles, FolderOpen, FileX, ArrowUp, ArrowDown, Music, Search, X as XIcon, Copy, Check } from 'lucide-react';
+import { Send, User, Flame, Wrench, Cloud, Cpu, Sparkles, FolderOpen, FileX, ArrowUp, ArrowDown, Music, Search, X as XIcon, Copy, Check, Play } from 'lucide-react';
 import { ChatWebSocket } from '../services/websocket';
 
 const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -72,6 +72,24 @@ function HighlightedText({ text, query }) {
   );
 }
 
+// Oyun Stüdyosu yanıtı: ham kod yerine temiz bir kart göster (kod panelde).
+function GameReadyCard({ onOpen }) {
+  return (
+    <div className="game-ready-card">
+      <div className="game-ready-info">
+        <span className="game-ready-icon">🎮</span>
+        <div className="game-ready-text">
+          <strong>Oyunun hazır!</strong>
+          <span>Kod Paneli'nde önizlemede açıldı — klavyeyle oynayabilirsin.</span>
+        </div>
+      </div>
+      <button type="button" className="game-ready-btn" onClick={onOpen}>
+        <Play size={14} /> Önizle / Oyna
+      </button>
+    </div>
+  );
+}
+
 export default function ChatWindow({
   currentSession,
   messages,
@@ -137,13 +155,19 @@ export default function ChatWindow({
     setSearchQuery('');
   };
 
+  // Oyun Stüdyosu'nda tamamlanmış asistan yanıtındaki oyun kodu (yoksa null)
+  const gameOf = (msg) =>
+    activeProductId === 'game_studio' && msg.role === 'assistant' && !msg.isStreaming
+      ? extractHtmlBlock(msg.content)
+      : null;
+
   // Oyun Stüdyosu: tamamlanan yanıttaki ```html oyununu kod paneline gönder
   useEffect(() => {
     if (activeProductId !== 'game_studio') return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== 'assistant' || last.isStreaming) return;
     const html = extractHtmlBlock(last.content);
-    if (html) onFileTouched?.('oyun.html', normalizeGameHtml(html));
+    if (html) onFileTouched?.('oyun.html', normalizeGameHtml(html), true);
   }, [messages, activeProductId, onFileTouched]);
 
   const handleCopy = async (msg) => {
@@ -300,9 +324,22 @@ export default function ChatWindow({
 
     setInput('');
 
-    const history = messages
+    let history = messages
       .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isError)
       .map(m => ({ role: m.role, content: m.content }));
+
+    // Oyun Stüdyosu: her turda ~2KB kod geçmişe birikip 3B modeli bağlam/timeout
+    // sınırına itiyor. Geçmişi yalnızca EN SON oyun koduna kırp (normalize edip
+    // fence'le) — model düzenleme için güncel kodu görür, bağlam küçük kalır.
+    if (activeProductId === 'game_studio') {
+      const lastGame = [...messages]
+        .reverse()
+        .find(m => m.role === 'assistant' && !m.isError && extractHtmlBlock(m.content));
+      const code = lastGame && extractHtmlBlock(lastGame.content);
+      history = code
+        ? [{ role: 'assistant', content: '```html\n' + normalizeGameHtml(code) + '\n```' }]
+        : [];
+    }
 
     streamIndexRef.current = null;
     setMessages(prev => [...prev, { id: genId(), role: 'user', content: userMsg }]);
@@ -565,6 +602,10 @@ export default function ChatWindow({
                     <HighlightedText text={msg.content} query={normalizedQuery} />
                   ) : msg.isStreaming ? (
                     <pre className="message-streaming">{msg.content}</pre>
+                  ) : (gameOf(msg)) ? (
+                    <GameReadyCard
+                      onOpen={() => onFileTouched?.('oyun.html', normalizeGameHtml(gameOf(msg)), true)}
+                    />
                   ) : normalizedQuery ? (
                     <pre className="message-streaming"><HighlightedText text={msg.content} query={normalizedQuery} /></pre>
                   ) : (

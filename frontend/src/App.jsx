@@ -74,10 +74,11 @@ export default function App() {
   const [activeFilePath, setActiveFilePath] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(560);
+  const [panelPreviewNonce, setPanelPreviewNonce] = useState(0); // artınca panel önizlemeye geçer
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const dragState = useRef(null);
 
-  const handleFileTouched = useCallback((path, content) => {
+  const handleFileTouched = useCallback((path, content, preview = false) => {
     if (!path) return;
     setPanelFiles((prev) => {
       const idx = prev.findIndex((f) => f.path === path);
@@ -90,6 +91,8 @@ export default function App() {
     });
     setActiveFilePath(path);
     setPanelOpen(true);
+    // Oyun gibi çalıştırılabilir çıktıyı doğrudan önizlemede aç
+    if (preview) setPanelPreviewNonce((n) => n + 1);
   }, []);
 
   const handleSelectTab = useCallback((path) => setActiveFilePath(path), []);
@@ -413,6 +416,7 @@ export default function App() {
             onSelectTab={handleSelectTab}
             onCloseTab={handleCloseTab}
             onClose={() => setPanelOpen(false)}
+            previewSignal={panelPreviewNonce}
           />
         </aside>
       )}

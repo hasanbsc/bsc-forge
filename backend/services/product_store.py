@@ -56,6 +56,9 @@ kaplay({ width: 800, height: 600, background: [11, 11, 18], letterbox: true });
 - Yerçekimi: setGravity(1600); oyuncu.jump(800); oyuncu.isGrounded()
 - Girdi: onKeyDown("left", ()=>oyuncu.move(-200,0)) · onKeyPress("space", ()=>...) ·
   onClick(()=>...) · onMouseMove((p)=>...)
+- 4 YÖN HAREKET (yerçekimsiz oyunlarda yukarı/aşağı dahil hep move kullan, jump DEĞİL):
+  onKeyDown("up", ()=>oyuncu.move(0,-HIZ)); onKeyDown("down", ()=>oyuncu.move(0,HIZ));
+  onKeyDown("left", ()=>oyuncu.move(-HIZ,0)); onKeyDown("right", ()=>oyuncu.move(HIZ,0));
 - Döngü: onUpdate(()=>{...}) · obj.onUpdate(()=>{...}) · dt() [kare süresi]
 - Çarpışma: oyuncu.onCollide("dusman", ()=>{...}) · onCollide("a","b",(a,b)=>{...})
 - Zamanlama/rastgele: loop(1,()=>{...}) · wait(2,()=>{...}) · rand(a,b) · randi(a,b) · choose([...])
@@ -131,10 +134,13 @@ go("oyun");
    Yarım/çalışmayan oyun verme. Tür belirsizse basit bir klasik seç (yılan, kaçış, platform, tıkla-vur).
 5. Tüm metinler Türkçe. Renkli, canlı bir palet kullan.
 
-## DÜZENLEME
-Kullanıcı değişiklik isterse, bir önceki oyunun üstüne istenen değişikliği uygula
-ve güncellenmiş TAM html'i yine tek bir ```html kod bloğu olarak baştan ver.
-Parça/diff verme; her zaman çalışan tam dosyayı ver.
+## DÜZENLEME (ÇOK ÖNEMLİ)
+Kullanıcı değişiklik isterse:
+- ASLA açıklama yazma. "Şunu kullanmalıyım", "şöyle yapabiliriz" gibi cümleler YASAK.
+- Geçmişteki son oyunun TAM kodunu al, SADECE istenen değişikliği uygula,
+  gerisini aynen koru.
+- Yanıtın yine SADECE tek bir ```html kod bloğu olsun — tam, çalışan dosya.
+  Diff/parça/yorum verme. ```html ile başla, ``` ile bitir.
 
 ## KURALLAR
 - Yanıt = tek ```html kod bloğu. Başka metin yok.

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { X, Code2, Eye, Copy, Check } from 'lucide-react';
 
@@ -36,7 +36,7 @@ function basename(path) {
   return parts[parts.length - 1] || path;
 }
 
-export default function CodePanel({ files, activePath, onSelectTab, onCloseTab, onClose }) {
+export default function CodePanel({ files, activePath, onSelectTab, onCloseTab, onClose, previewSignal = 0 }) {
   const [view, setView] = useState('code'); // 'code' | 'preview'
   const [copied, setCopied] = useState(false);
 
@@ -46,6 +46,11 @@ export default function CodePanel({ files, activePath, onSelectTab, onCloseTab, 
   );
 
   const isHtml = activeFile && /\.(html?|htm)$/i.test(activeFile.path);
+
+  // Dışarıdan önizleme istendiğinde (örn. oyun üretildi) önizleme sekmesine geç
+  useEffect(() => {
+    if (previewSignal > 0) setView('preview');
+  }, [previewSignal]);
   const effectiveView = isHtml ? view : 'code';
 
   const handleCopy = async () => {
