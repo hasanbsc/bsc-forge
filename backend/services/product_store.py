@@ -64,6 +64,64 @@ kaplay({ width: 800, height: 600, background: [11, 11, 18], letterbox: true });
 - Sahneler: scene("oyun",()=>{...}); scene("bitti",(skor)=>{...}); go("oyun"); go("bitti", skor)
 - Skor metni: const s = add([ text("Skor: 0"), pos(12,12) ]); s.text = "Skor: " + skor;
 
+## YAYGIN HATALAR — BUNLARI ASLA KULLANMA
+- `obj.collisions()` YOK. Çarpışma için: oyuncu.onCollide("dusman", () => {...})
+- `onLoad(...)` YOK. Oyun kodunu doğrudan scene("oyun", () => {...}) içine yaz.
+- `obj.pos()` fonksiyon DEĞİL. Konum: obj.pos.x ve obj.pos.y (parantezsiz).
+- `body(true)` veya argümanlı body YOK. Yerçekimi gerekmiyorsa body() hiç kullanma;
+  yerçekimsiz oyunda isGrounded()/jump() de kullanma.
+- Hareket: obj.move(x, y) hızdır (px/sn), dt'yi kendi uygular — `*dt()` ile çarpma.
+
+## ÖRNEK — ÇALIŞAN TAM KAÇIŞ OYUNU (bu yapıyı ve API kullanımını birebir taklit et)
+```html
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaçış Oyunu</title>
+<style>html,body{margin:0;height:100%;background:#0b0b12;overflow:hidden}canvas{display:block;margin:0 auto}</style>
+</head>
+<body>
+<script src="https://unpkg.com/kaplay@3001.0.19/dist/kaplay.js"></script>
+<script>
+window.kaboom = window.kaboom || window.kaplay;
+kaplay({ width: 800, height: 600, background: [18, 18, 28], letterbox: true });
+
+scene("oyun", () => {
+  let skor = 0;
+  const skorMetni = add([ text("Skor: 0", { size: 24 }), pos(12, 12) ]);
+  add([ text("← → ile kaç", { size: 18 }), pos(12, height() - 30), color(170, 170, 170) ]);
+
+  const oyuncu = add([ rect(46, 46), pos(width() / 2, height() - 60), color(80, 200, 120), area(), anchor("center"), "oyuncu" ]);
+
+  const HIZ = 360;
+  onKeyDown("left", () => oyuncu.move(-HIZ, 0));
+  onKeyDown("right", () => oyuncu.move(HIZ, 0));
+  oyuncu.onUpdate(() => { oyuncu.pos.x = clamp(oyuncu.pos.x, 23, width() - 23); });
+
+  loop(0.6, () => {
+    add([ rect(40, 40), pos(rand(20, width() - 20), -40), color(230, 80, 80), area(), anchor("center"), move(0, rand(180, 320)), offscreen({ destroy: true }), "dusman" ]);
+  });
+
+  loop(0.5, () => { skor += 1; skorMetni.text = "Skor: " + skor; });
+
+  oyuncu.onCollide("dusman", () => go("bitti", skor));
+});
+
+scene("bitti", (skor) => {
+  add([ text("Oyun Bitti!", { size: 48 }), pos(center().sub(0, 40)), anchor("center") ]);
+  add([ text("Skor: " + skor, { size: 28 }), pos(center().add(0, 20)), anchor("center") ]);
+  add([ text("Tekrar için BOŞLUK", { size: 20 }), pos(center().add(0, 70)), anchor("center"), color(170, 170, 170) ]);
+  onKeyPress("space", () => go("oyun"));
+});
+
+go("oyun");
+</script>
+</body>
+</html>
+```
+
 ## OYUN KALİTE KURALLARI
 1. Oyun OYNANABİLİR olmalı: net bir amaç, kontroller, kazanma/kaybetme durumu.
 2. Kontrolleri ekranda Türkçe yaz (örn. "← → hareket, BOŞLUK zıpla").
