@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(kill 3351 3503)",
+      "Bash(kill 3352 3515)",
+      "Bash(tailscale set *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(tailscale status *)",
+      "Bash(tailscale funnel *)",
+      "Bash(ollama rm *)",
+      "Bash(ollama list *)"
+    ]
+  }
+}

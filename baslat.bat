@@ -1,65 +1,43 @@
-@echo off
-setlocal
-title BSC Forge
-
-REM ============================================================
-REM  BSC Forge - Sunucu baslatici
-REM  Proje WSL icinde (/home/hasan/bsc-forge) calisiyor.
-REM ============================================================
-
-REM ===== 1/2: Tailscale Funnel =====
-set "TS=C:\Program Files\Tailscale\tailscale.exe"
-if exist "%TS%" goto :ts_ready
-where tailscale >nul 2>nul
-if errorlevel 1 goto :ts_skip
-set "TS=tailscale"
-
-:ts_ready
-echo [1/2] Tailscale Funnel ayarlaniyor...
-"%TS%" funnel --bg 8000
-if errorlevel 1 goto :ts_warn
-echo.
-echo Funnel aktif. Public URL:
-"%TS%" funnel status
-echo.
-goto :start_backend
-
-:ts_warn
-echo.
-echo UYARI: Funnel baslatilamadi. Kontrol et:
-echo   1) Tailscale system tray'de giris yapildi mi?
-echo   2) Admin panelde Funnel feature acik mi?
-echo   3) ACL nodeAttrs ile funnel izni verildi mi?
-echo.
-goto :start_backend
-
-:ts_skip
-echo [1/2] Tailscale bulunamadi - sadece yerel calisacak.
-echo        Public link icin: https://tailscale.com/download/windows
-echo.
-
-:start_backend
-REM ===== 2/2: Backend (WSL) =====
-where wsl >nul 2>nul
-if errorlevel 1 goto :no_wsl
-
-echo [2/2] Frontend build + backend baslatiliyor (WSL)...
-echo ============================================================
-echo   BSC Forge calisiyor
-echo   Yerel:    http://localhost:8000
-echo   Public:   yukaridaki Funnel URL
-echo   Durdur:   Ctrl+C  veya  bu pencereyi kapat
-echo ============================================================
-echo.
-
-wsl bash -c "cd /home/hasan/bsc-forge/frontend && echo '--- Frontend derleniyor... ---' && npm run build && echo '--- Backend baslatiliyor... ---' && cd ../backend && source venv/bin/activate && python3 main.py"
-
-echo.
-echo Sunucu durdu.
-goto :end
-
-:no_wsl
-echo HATA: WSL bulunamadi. Windows'ta WSL kurulu olmali.
-
-:end
-pause
+@echo off
+setlocal enabledelayedexpansion
+title BSC Forge
+
+REM ============================================================
+REM  BSC Forge - Tek tikla baslatici
+REM  Public URL: https://bsc-forge.elf-justitia.ts.net
+REM
+REM  Ilk acilista WSL'ye Tailscale kurulup auth gerekebilir
+REM  (pencerede yonergeler basilir). Sonraki acilislar tamamen
+REM  otomatiktir.
+REM ============================================================
+
+set "TS_WIN=C:\Program Files\Tailscale\tailscale.exe"
+
+REM ===== 1) Windows tarafindaki Funnel kayitlarini temizle =====
+REM    Funnel WSL icinde acilir; Windows daemon'a takili eski kayitlar
+REM    cakisma yapmasin diye sifirlanir. Node rename'i icin admin panel:
+REM    https://login.tailscale.com/admin/machines
+if exist "%TS_WIN%" "%TS_WIN%" funnel reset >nul 2>nul
+
+REM ===== 2) WSL var mi? =====
+where wsl >nul 2>nul
+if errorlevel 1 (
+  echo HATA: WSL bulunamadi. Windows'ta WSL kurulu olmali.
+  pause
+  exit /b 1
+)
+
+echo ============================================================
+echo   BSC Forge baslatiliyor
+echo   Yerel:   http://localhost:8000
+echo   Public:  https://bsc-forge.elf-justitia.ts.net
+echo   Durdur:  Ctrl+C  veya  bu pencereyi kapat
+echo ============================================================
+echo.
+
+REM ===== 3) WSL icindeki baslat.sh'i calistir =====
+wsl bash /home/hasan/bsc-forge/baslat.sh
+
+echo.
+echo Sunucu durdu.
+pause
