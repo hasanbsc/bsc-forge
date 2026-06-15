@@ -11,10 +11,10 @@ BSC Forge projesini başlat: backend ve frontend'i arka planda çalıştır, sa�
 ### 1. Backend
 
 ```bash
-cd /home/hasan/bsc-forge/backend
+cd /run/media/hasan/34962E3B962DFE4C/bsc-forge
 ```
 
-Sanal ortam yoksa oluştur:
+Sanal ortam yoksa oluştur (venv proje kökündedir):
 
 ```bash
 [ -d venv ] || python3 -m venv venv
@@ -23,13 +23,13 @@ Sanal ortam yoksa oluştur:
 Bağımlılıkları kur (zaten kuruluysa atlar):
 
 ```bash
-source venv/bin/activate && pip install -r requirements.txt -q
+source venv/bin/activate && pip install -r backend/requirements.txt -q
 ```
 
 Backend'i başlat:
 
 ```bash
-source venv/bin/activate && python3 main.py > /tmp/bsc-backend.log 2>&1 &
+source venv/bin/activate && cd backend && python3 main.py > /tmp/bsc-backend.log 2>&1 &
 echo "Backend PID: $!"
 ```
 
@@ -42,7 +42,7 @@ sleep 3 && curl -s http://localhost:8000/
 ### 2. Frontend
 
 ```bash
-cd /home/hasan/bsc-forge/frontend
+cd /run/media/hasan/34962E3B962DFE4C/bsc-forge/frontend
 ```
 
 Bağımlılıkları kur (node_modules yoksa):
@@ -66,11 +66,12 @@ sleep 4 && curl -s http://localhost:5173/ | head -3
 
 ### 3. Tarayıcıyı aç (anında hazır sohbet)
 
-Frontend sağlıklıysa, WSL'den Windows'un varsayılan tarayıcısında sohbet
-ekranını otomatik aç (kullanıcıya ekstra tıklama bırakma):
+Frontend sağlıklıysa, varsayılan tarayıcıda sohbet ekranını otomatik aç
+(kullanıcıya ekstra tıklama bırakma). Masaüstü oturumu yoksa (başsız sunucu)
+sessizce atlanır:
 
 ```bash
-explorer.exe "http://localhost:5173" 2>/dev/null || cmd.exe /c start "" "http://localhost:5173" 2>/dev/null || true
+xdg-open "http://localhost:5173" >/dev/null 2>&1 || true
 ```
 
 > Sohbet ekranı artık açılışta doğrudan yazıma hazır gelir — karşılama

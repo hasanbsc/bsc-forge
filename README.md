@@ -41,10 +41,10 @@ Anahtarları al:
 
 ### 3. Backend
 ```bash
-cd backend
-python3 -m venv venv
+python3 -m venv venv      # proje kökünde
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
+cd backend
 python3 main.py            # http://localhost:8000
 ```
 

@@ -172,8 +172,8 @@ Sıradaki ana hat: **Faz 5 — İlk Ürün (English Buddy)**.
 ### 7.7 `/baslat` ile Anında Hazır 🟢
 - ✅ Karşılama ekranı artık input'u gizlemiyor — kutu her zaman altta görünür;
   ilk mesaj yazıldığında oturum **otomatik** oluşturulur (ekstra tıklama yok)
-- ✅ `/baslat` skill'i frontend sağlıklıysa Windows tarayıcısını otomatik açar
-  (`explorer.exe` → fallback `cmd.exe /c start`)
+- ✅ `/baslat` skill'i frontend sağlıklıysa varsayılan tarayıcıyı otomatik açar
+  (`xdg-open`; başsız sunucuda sessizce atlanır)
 - ✅ Skill özeti sohbet URL'ini tıklanabilir link olarak verir
 
 ### 7.8 Model Zaman Aşımı Politikası
@@ -208,7 +208,7 @@ Sıradaki ana hat: **Faz 5 — İlk Ürün (English Buddy)**.
 | Backend | Python 3.11+, FastAPI, WebSocket, SQLite (aiosqlite) |
 | Frontend | React 19, Vite, Vanilla CSS |
 | LLM | Gemini API, Groq API, DeepSeek API, Ollama |
-| Çalışma Ortamı | Windows + WSL 2 Ubuntu |
+| Çalışma Ortamı | Native Linux (Ubuntu) sunucu |
 
 ---
 

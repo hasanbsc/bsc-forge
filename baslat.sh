@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# BSC Forge - WSL tarafi baslatici.
-# .bat tarafindan cagrilir. Idempotent: ilk acilista kurulum/auth yapar,
-# sonraki acilislarda mevcut state'i kullanir.
+# BSC Forge - Linux sunucu baslatici.
+# Idempotent: ilk acilista Tailscale kurulum/auth yapar, sonraki
+# acilislarda mevcut state'i kullanir. Funnel uzerinden public URL acar,
+# frontend'i derler ve backend'i baslatir.
 
 set -e
 
-cd /home/hasan/bsc-forge
+# ===== 0) Proje koku (script'in bulundugu dizin) =====
+#   Disk yeniden baglanip mount yolu degisse bile dogru calismasi icin
+#   sabit yol yerine script'in kendi konumu kullanilir.
+PROJE_KOK="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$PROJE_KOK"
 
-# ===== 1) Tailscale WSL'de kurulu mu? =====
+# ===== 1) Tailscale kurulu mu? =====
 if ! command -v tailscale >/dev/null; then
   echo ""
   echo "============================================================"
-  echo "  Tailscale WSL'ye kuruluyor (sudo sifresi istenecek)"
+  echo "  Tailscale kuruluyor (sudo sifresi istenecek)"
   echo "============================================================"
   curl -fsSL https://tailscale.com/install.sh | sh
 fi
@@ -21,7 +26,7 @@ if tailscale status 2>&1 | grep -qE "Logged out|NeedsLogin|stopped|NoState"; the
   echo ""
   echo "============================================================"
   echo "  Tailscale auth gerekiyor (sadece ilk acilista bir kez)"
-  echo "  Asagida cikacak URL'yi Windows tarayicinda ac, onayla."
+  echo "  Asagida cikacak URL'yi bir tarayicida ac, onayla."
   echo "  Sudo sifren istenebilir."
   echo "============================================================"
   sudo tailscale up --hostname=bsc-forge --operator="$USER" --accept-dns=false
@@ -41,13 +46,14 @@ echo "--- Funnel durumu ---"
 tailscale funnel status 2>&1 || true
 echo ""
 
-# ===== 5) Frontend build + backend =====
+# ===== 4) Frontend build =====
 echo "--- Frontend derleniyor ---"
-cd frontend
+cd "$PROJE_KOK/frontend"
 npm run build
 echo ""
 
+# ===== 5) Backend baslat =====
 echo "--- Backend baslatiliyor ---"
-cd ../backend
-source venv/bin/activate
+cd "$PROJE_KOK/backend"
+source "$PROJE_KOK/venv/bin/activate"
 exec python3 main.py

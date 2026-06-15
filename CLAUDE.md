@@ -14,8 +14,8 @@ Kod tabanı ve arayüz Türkçedir.
 
 ### Backend
 ```bash
+source venv/bin/activate        # venv proje kökündedir
 cd backend
-source venv/bin/activate
 python3 main.py                 # http://localhost:8000
 ```
 Bağımlılıklar: `pip install -r backend/requirements.txt`
